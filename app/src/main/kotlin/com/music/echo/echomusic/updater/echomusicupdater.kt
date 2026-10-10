@@ -182,6 +182,8 @@ fun UpdateScreen(navController: NavHostController) {
         isDownloadComplete = false
         downloadedFile = null
         downloadProgress = 0f
+      } else {
+        triggerApkInstall(context, downloadedFile!!)
       }
     }
   }
@@ -314,61 +316,14 @@ fun UpdateScreen(navController: NavHostController) {
                         downloadProgress = 0f
                         return@AnimatedActionButton
                       }
-                      file.let { f ->
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                          if (!context.packageManager.canRequestPackageInstalls()) {
-                            val intent =
-                              Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
-                                .apply { data = Uri.parse("package:${context.packageName}") }
-                            context.startActivity(intent)
-                            return@let
-                          }
-                        }
-                        val uri =
-                          FileProvider.getUriForFile(
-                            context,
-                            "${context.packageName}.FileProvider",
-                            file
-                          )
-                        val installIntent =
-                          Intent(Intent.ACTION_VIEW).apply {
-                            setDataAndType(uri, "application/vnd.android.package-archive")
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                          }
-                        ContextCompat.startActivity(context, installIntent, null)
-                      }
+                      triggerApkInstall(context, file)
                     } else {
-                      val urlToDownload =
-                        currentStatus.apkUrl
-                          ?: "https://github.com/EchoMusicApp/Echo-Music/releases/download/${currentStatus.version}/echomusic.apk"
-
-                      val constraints =
-                        Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
-
-                      val downloadRequest =
-                        OneTimeWorkRequestBuilder<UpdateDownloadWorker>()
-                          .setInputData(
-                            workDataOf(
-                              "apk_url" to urlToDownload,
-                              "version" to currentStatus.version,
-                              "file_size" to currentStatus.size
-                            )
-                          )
-                          .setConstraints(constraints)
-                          .setBackoffCriteria(
-                            BackoffPolicy.EXPONENTIAL,
-                            10,
-                            java.util.concurrent.TimeUnit.SECONDS
-                          )
-                          .addTag("update_download")
-                          .build()
-                      WorkManager.getInstance(context)
-                        .enqueueUniqueWork(
-                          "update_download",
-                          ExistingWorkPolicy.REPLACE,
-                          downloadRequest
-                        )
+                      startUpdateDownload(
+                        context = context,
+                        version = currentStatus.version,
+                        apkUrl = currentStatus.apkUrl,
+                        size = currentStatus.size
+                      )
                       isDownloading = true
                     }
                   },
@@ -563,6 +518,70 @@ fun UpdateScreen(navController: NavHostController) {
   }
 }
 
+fun triggerApkInstall(context: Context, file: File) {
+  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+    if (!context.packageManager.canRequestPackageInstalls()) {
+      val intent =
+        Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
+          .apply { data = Uri.parse("package:${context.packageName}") }
+      context.startActivity(intent)
+      return
+    }
+  }
+  val uri =
+    FileProvider.getUriForFile(
+      context,
+      "${context.packageName}.FileProvider",
+      file
+    )
+  val installIntent =
+    Intent(Intent.ACTION_VIEW).apply {
+      setDataAndType(uri, "application/vnd.android.package-archive")
+      addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+      addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+  ContextCompat.startActivity(context, installIntent, null)
+}
+
+fun startUpdateDownload(
+  context: Context,
+  version: String,
+  apkUrl: String? = null,
+  size: String? = null
+) {
+  val urlToDownload =
+    apkUrl
+      ?: "https://github.com/abhiyank-mishra/muse/releases/download/$version/Muse.Music.apk"
+
+  val constraints =
+    Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
+
+  val downloadRequest =
+    OneTimeWorkRequestBuilder<UpdateDownloadWorker>()
+      .setInputData(
+        workDataOf(
+          "apk_url" to urlToDownload,
+          "version" to version,
+          "file_size" to (size ?: "")
+        )
+      )
+      .setConstraints(constraints)
+      .setBackoffCriteria(
+        BackoffPolicy.EXPONENTIAL,
+        10,
+        java.util.concurrent.TimeUnit.SECONDS
+      )
+      .addTag("update_download")
+      .build()
+
+  WorkManager.getInstance(context)
+    .enqueueUniqueWork(
+      "update_download",
+      ExistingWorkPolicy.REPLACE,
+      downloadRequest
+    )
+}
+
 const val PREFS_NAME = "settings"
 const val KEY_AUTO_UPDATE_CHECK = "auto_update_check"
 const val KEY_LAST_CHECKED_TIME = "last_checked_time"
@@ -632,11 +651,11 @@ private fun formatGitHubDate(githubDate: String): String =
   }
 
 fun isNewerVersion(latestVersion: String, currentVersion: String): Boolean {
-  val latestVersionClean = latestVersion.removePrefix("b").removePrefix("v")
-  val currentVersionClean = currentVersion.removePrefix("b").removePrefix("v")
+  val latestVersionClean = latestVersion.removePrefix("b").removePrefix("v").trim()
+  val currentVersionClean = currentVersion.removePrefix("b").removePrefix("v").trim()
 
-  val latestParts = latestVersionClean.split(".").map { it.toIntOrNull() ?: 0 }
-  val currentParts = currentVersionClean.split(".").map { it.toIntOrNull() ?: 0 }
+  val latestParts = latestVersionClean.split(".").map { it.split("-")[0].toIntOrNull() ?: 0 }
+  val currentParts = currentVersionClean.split(".").map { it.split("-")[0].toIntOrNull() ?: 0 }
 
   for (i in 0 until maxOf(latestParts.size, currentParts.size)) {
     val latest = latestParts.getOrElse(i) { 0 }
@@ -674,29 +693,28 @@ suspend fun checkForUpdate(
 ) {
   withContext(Dispatchers.IO) {
     try {
-      val url = URL("https://api.github.com/repos/EchoMusicApp/Echo-Music/releases/latest")
-      val json = url.openStream().bufferedReader().use { it.readText() }
+      val url = URL("https://api.github.com/repos/abhiyank-mishra/muse/releases/latest")
+      val json = openTimedStream(url.toString()).bufferedReader().use { it.readText() }
       val targetRelease = JSONObject(json)
 
       val currentVersion = BuildConfig.VERSION_NAME
       val targetTagName = targetRelease.getString("tag_name")
       val currentClean = currentVersion.removePrefix("b").removePrefix("v").trim()
       val targetClean = targetTagName.removePrefix("b").removePrefix("v").trim()
-      val shouldShow = currentClean != targetClean
+
+      val shouldShow = isNewerVersion(targetClean, currentClean)
 
       if (shouldShow) {
-        val tagWithPrefix = targetRelease.getString("tag_name")
-        val displayTag = tagWithPrefix
+        val displayTag = targetTagName
 
         val changelogList = mutableListOf<ChangelogSection>()
         var description: String? = null
         var imageUrl: String? = null
+
         try {
           val changelogUrl =
-            URL(
-              "https://github.com/EchoMusicApp/Echo-Music/releases/download/$tagWithPrefix/changelog.json"
-            )
-          val changelogJson = changelogUrl.openStream().bufferedReader().use { it.readText() }
+            "https://github.com/abhiyank-mishra/muse/releases/download/$targetTagName/changelog.json"
+          val changelogJson = openTimedStream(changelogUrl).bufferedReader().use { it.readText() }
           val changelogData = JSONObject(changelogJson)
 
           description = changelogData.optString("description").takeIf { it.isNotEmpty() }
@@ -713,7 +731,7 @@ suspend fun checkForUpdate(
             }
             changelogList.add(ChangelogSection(title, itemsList))
           }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
           var body =
             targetRelease.optString("body", context.getString(R.string.no_changelog_available))
 
@@ -728,41 +746,48 @@ suspend fun checkForUpdate(
           changelogList.addAll(parsedSections)
         }
 
-        val publishedAt = targetRelease.getString("published_at")
-        val formattedReleaseDate = formatGitHubDate(publishedAt)
-        val assets = targetRelease.getJSONArray("assets")
+        val publishedAt = targetRelease.optString("published_at", "")
+        val formattedReleaseDate = if (publishedAt.isNotEmpty()) formatGitHubDate(publishedAt) else ""
+        val assets = targetRelease.optJSONArray("assets")
 
         var apkSizeInMB = ""
         var apkDownloadUrl = ""
-        for (j in 0 until assets.length()) {
-          val asset = assets.getJSONObject(j)
-          val assetName = asset.getString("name")
-          if (
-            assetName.endsWith(".apk", ignoreCase = true) &&
-              !assetName.lowercase().contains("debug")
-          ) {
-            val apkSizeInBytes = asset.getLong("size")
-            apkSizeInMB = String.format("%.1f", apkSizeInBytes / (1024.0 * 1024.0))
-            apkDownloadUrl = asset.getString("browser_download_url")
-            break
+        if (assets != null) {
+          for (j in 0 until assets.length()) {
+            val asset = assets.getJSONObject(j)
+            val assetName = asset.getString("name")
+            if (
+              assetName.endsWith(".apk", ignoreCase = true) &&
+                !assetName.lowercase().contains("debug")
+            ) {
+              val apkSizeInBytes = asset.optLong("size", 0L)
+              if (apkSizeInBytes > 0) {
+                apkSizeInMB = String.format(java.util.Locale.US, "%.1f MB", apkSizeInBytes / (1024.0 * 1024.0))
+              }
+              apkDownloadUrl = asset.getString("browser_download_url")
+              break
+            }
           }
         }
 
-        if (apkDownloadUrl.isNotEmpty()) {
-          withContext(Dispatchers.Main) {
-            onSuccess(
-              displayTag,
-              true,
-              changelogList,
-              apkSizeInMB,
-              formattedReleaseDate,
-              description,
-              imageUrl,
-              apkDownloadUrl
-            )
-          }
-          return@withContext
+        if (apkDownloadUrl.isEmpty()) {
+          apkDownloadUrl =
+            "https://github.com/abhiyank-mishra/muse/releases/download/$targetTagName/Muse.Music.apk"
         }
+
+        withContext(Dispatchers.Main) {
+          onSuccess(
+            displayTag,
+            true,
+            changelogList,
+            apkSizeInMB,
+            formattedReleaseDate,
+            description,
+            imageUrl,
+            apkDownloadUrl
+          )
+        }
+        return@withContext
       }
 
       withContext(Dispatchers.Main) {
@@ -801,6 +826,8 @@ private fun openTimedStream(url: String): java.io.InputStream =
     .apply {
       connectTimeout = 15_000
       readTimeout = 15_000
+      setRequestProperty("User-Agent", "Muse-Updater")
+      setRequestProperty("Accept", "application/vnd.github+json")
     }
     .getInputStream()
 
@@ -814,7 +841,7 @@ suspend fun fetchChangelogForVersion(currentVersion: String): WhatsNewInfo? =
     try {
       val cleanCurrent = currentVersion.removePrefix("b").removePrefix("v").trim()
       val releasesJson =
-        openTimedStream("https://api.github.com/repos/EchoMusicApp/Echo-Music/releases")
+        openTimedStream("https://api.github.com/repos/abhiyank-mishra/muse/releases")
           .bufferedReader()
           .use { it.readText() }
       val releases = JSONArray(releasesJson)
@@ -836,7 +863,7 @@ suspend fun fetchChangelogForVersion(currentVersion: String): WhatsNewInfo? =
       try {
         val changelogJson =
           openTimedStream(
-              "https://github.com/EchoMusicApp/Echo-Music/releases/download/$tag/changelog.json"
+              "https://github.com/abhiyank-mishra/muse/releases/download/$tag/changelog.json"
             )
             .bufferedReader()
             .use { it.readText() }

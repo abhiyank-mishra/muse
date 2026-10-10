@@ -34,3 +34,9 @@ lastfm-empty/build/
 
 # Logs
 *.log
+
+# Scratch and test files
+/*.png
+/ui.xml
+/launch_emulator.bat
+/google-services.json

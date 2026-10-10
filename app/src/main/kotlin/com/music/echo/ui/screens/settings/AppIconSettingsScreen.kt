@@ -108,50 +108,29 @@ fun AppIconSettingsScreen(
     val icons =
       listOf(
         AppIconOption(
-          AppIconType.BILLIE_EILISH,
-          "Billie Eilish",
-          "billie eilish suggested by Lalo salamanca",
-          R.mipmap.billie_eilish_icon
-        ),
-        AppIconOption(AppIconType.CAT, "Cat Icon", "A Pinkish cat-themed icon", R.mipmap.cat_icon),
-        AppIconOption(
-          AppIconType.CRAZY_BLUE,
-          "Crazy Blue Icon",
-          "A vibrant crazy blue icon",
-          R.mipmap.crazy_blue_icon
-        ),
-        AppIconOption(
-          AppIconType.ECHO_CAT,
-          "Echo Cat",
-          "A playful cat by Alarp_Svc",
-          R.mipmap.echo_cat_icon
-        ),
-        AppIconOption(
-          AppIconType.LEGACY,
-          "Legacy Icon",
-          "The OG Monochrome Icon",
-          R.mipmap.legacy_icon
-        ),
-        AppIconOption(
           AppIconType.DEFAULT,
-          "New Icon",
-          "The standard vibrant icon",
+          "Muse Default",
+          "Standard vibrant icon",
           R.mipmap.ic_launcher
         ),
-        AppIconOption(AppIconType.POOKIE, "Pookie Icon", "A Cute Pink icon", R.mipmap.pookie_icon),
+        AppIconOption(
+          AppIconType.BILLIE_EILISH,
+          "Billie Eilish",
+          "Billie Eilish edition",
+          R.mipmap.billie_eilish_icon
+        ),
         AppIconOption(
           AppIconType.SABRINA_CARPENTER,
           "Sabrina Carpenter",
-          "Suggested by notdieinganymore",
+          "Sabrina Carpenter edition",
           R.mipmap.ic_launcher_sabrina
         ),
         AppIconOption(
           AppIconType.SABRINA_CARPENTER_2,
           "Sabrina Carpenter 2",
-          "Suggested by Falvik",
+          "Sabrina Carpenter edition 2",
           R.mipmap.ic_launcher_sabrina2
-        ),
-        AppIconOption(AppIconType.SKY, "Sky Icon", "A beautiful sky-themed icon", R.mipmap.sky_icon)
+        )
       )
 
     Column(

@@ -1,45 +1,36 @@
 {
   "project_info": {
-    "project_number": "887842405081",
-    "project_id": "echo-aab3b",
-    "storage_bucket": "echo-aab3b.firebasestorage.app"
+    "project_number": "196392808479",
+    "project_id": "muse-155bb",
+    "storage_bucket": "muse-155bb.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:887842405081:android:2be388a7f6a02d941a5cc8",
+        "mobilesdk_app_id": "1:196392808479:android:3c66e3429a4280935b652a",
         "android_client_info": {
-          "package_name": "echo.music.iad1tya"
+          "package_name": "echo.music.abhiyank.debug"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "196392808479-g2pg0edus8idnj20ca0mftcq0b6b70s9.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
-          "current_key": "AIzaSyCvXEL8c5TOPmYUo33ghC7Cf64qYUGWfZg"
+          "current_key": "AIzaSyA5dWq4QSCK8AJCfHjtlN0_9vHTp31Aa1Y"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:887842405081:android:2be388a7f6a02d941a5cc8",
-        "android_client_info": {
-          "package_name": "echo.music.iad1tya.debug"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyCvXEL8c5TOPmYUo33ghC7Cf64qYUGWfZg"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "196392808479-g2pg0edus8idnj20ca0mftcq0b6b70s9.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

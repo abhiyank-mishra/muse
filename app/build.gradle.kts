@@ -30,11 +30,11 @@ android {
   ndkVersion = "28.2.13676358"
 
   defaultConfig {
-    applicationId = "echo.music.iad1tya"
+    applicationId = "echo.music.abhiyank"
     minSdk = 26
     targetSdk = 36
-    versionCode = 162
-    versionName = "1.4.1"
+    versionCode = 101
+    versionName = "1.0.1"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     vectorDrawables.useSupportLibrary = true
@@ -45,6 +45,11 @@ android {
 
     buildConfigField("String", "LASTFM_API_KEY", "\"$lastFmKey\"")
     buildConfigField("String", "LASTFM_SECRET", "\"$lastFmSecret\"")
+    buildConfigField(
+      "String",
+      "GOOGLE_WEB_CLIENT_ID",
+      "\"196392808479-g2pg0edus8idnj20ca0mftcq0b6b70s9.apps.googleusercontent.com\""
+    )
 
     // GitHub OAuth keys
     val githubClientId =
@@ -247,8 +252,12 @@ dependencies {
   implementation(project(":dsp-core"))
   implementation(project(":usbaudio"))
 
-  // Firebase - GMS flavor only (excluded from F-Droid / FOSS builds)
-  "gmsImplementation"(platform("com.google.firebase:firebase-bom:34.19.0"))
+  // Firebase & Google Auth for Muse Music
+  implementation(platform("com.google.firebase:firebase-bom:34.19.0"))
+  implementation("com.google.firebase:firebase-auth")
+  implementation("com.google.firebase:firebase-firestore")
+  implementation("com.google.firebase:firebase-messaging")
+  implementation("com.google.android.gms:play-services-auth:21.3.0")
   "gmsImplementation"("com.google.firebase:firebase-analytics")
   "gmsImplementation"("com.google.firebase:firebase-crashlytics")
 

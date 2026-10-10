@@ -1,6 +1,8 @@
 package echo.music.iad1tya.ui.screens.settings
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -36,6 +38,7 @@ import com.music.innertube.YouTube
 import com.music.innertube.utils.parseCookieString
 import echo.music.iad1tya.LocalPlayerAwareWindowInsets
 import echo.music.iad1tya.R
+import echo.music.iad1tya.auth.MuseAuthManager
 import echo.music.iad1tya.constants.*
 import echo.music.iad1tya.constants.SavedAccountsKey
 import echo.music.iad1tya.models.AccountData
@@ -81,11 +84,6 @@ fun AccountSettingsScreen(
   val accountName by homeViewModel.accountName.collectAsState()
   val accountImageUrl by homeViewModel.accountImageUrl.collectAsState()
 
-  var showToken by remember { mutableStateOf(false) }
-  var showTokenEditor by remember { mutableStateOf(false) }
-  var showLogoutDialog by remember { mutableStateOf(false) }
-  var showListenBrainzTokenEditor by remember { mutableStateOf(false) }
-
   Scaffold(
     modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
     topBar = {
@@ -111,433 +109,234 @@ fun AccountSettingsScreen(
     ) {
       Spacer(modifier = Modifier.height(16.dp))
 
-      val savedAccounts =
-        try {
-          Json.decodeFromString<List<AccountData>>(savedAccountsJson)
-        } catch (e: Exception) {
-          emptyList()
-        }
+      val museUser by MuseAuthManager.currentUser.collectAsState()
+      val customUsername by MuseAuthManager.customUsername.collectAsState()
+      var showEditUsernameDialog by remember { mutableStateOf(false) }
+      var editUsernameText by remember { mutableStateOf("") }
+      var isUpdatingUsername by remember { mutableStateOf(false) }
 
-      LaunchedEffect(isLoggedIn, innerTubeCookie, accountImageUrl, accountName) {
-        val nameToUse = if (accountNamePref.isNotBlank()) accountNamePref else accountName
-        if (isLoggedIn && nameToUse.isNotBlank() && nameToUse != "Guest") {
-          val mutableAccounts = savedAccounts.toMutableList()
-          val index = mutableAccounts.indexOfFirst { it.cookie == innerTubeCookie }
-          if (index == -1) {
-            mutableAccounts.add(
-              AccountData(
-                name = nameToUse,
-                email = accountEmail,
-                channelHandle = accountChannelHandle,
-                cookie = innerTubeCookie,
-                visitorData = visitorData,
-                dataSyncId = dataSyncId,
-                avatarUrl = accountImageUrl ?: ""
-              )
-            )
-            onSavedAccountsJsonChange(Json.encodeToString(mutableAccounts))
-          } else if (
-            mutableAccounts[index].name.isBlank() || mutableAccounts[index].avatarUrl.isBlank()
-          ) {
-            mutableAccounts[index] =
-              mutableAccounts[index].copy(
-                name = nameToUse,
-                avatarUrl = accountImageUrl ?: mutableAccounts[index].avatarUrl
-              )
-            onSavedAccountsJsonChange(Json.encodeToString(mutableAccounts))
-          }
-        }
-      }
-
-      if (savedAccounts.isNotEmpty()) {
-        Material3SettingsGroup(
-          scrollState = scrollState,
-          title = "Switch Accounts",
-          items =
-            savedAccounts.map { account ->
-              Material3SettingsItem(
-                icon =
-                  if (account.avatarUrl.isNotBlank()) null else painterResource(R.drawable.login),
-                title = {
-                  Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (account.avatarUrl.isNotBlank()) {
-                      AsyncImage(
-                        model = account.avatarUrl,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.size(40.dp).clip(CircleShape)
-                      )
-                      Spacer(modifier = Modifier.width(12.dp))
-                    }
-                    Column {
-                      Text(
-                        text = account.name,
-                        color =
-                          if (account.cookie == innerTubeCookie) MaterialTheme.colorScheme.primary
-                          else MaterialTheme.colorScheme.onSurface,
-                        style =
-                          MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold)
-                      )
-                      if (account.email.isNotBlank()) {
-                        Text(text = account.email, style = MaterialTheme.typography.bodySmall)
-                      }
-                    }
-                  }
-                },
-                trailingContent = {
-                  if (account.cookie != innerTubeCookie) {
-                    IconButton(
-                      onClick = {
-                        val mutableAccounts = savedAccounts.toMutableList()
-                        mutableAccounts.remove(account)
-                        onSavedAccountsJsonChange(Json.encodeToString(mutableAccounts))
-                      }
-                    ) {
-                      Icon(painterResource(R.drawable.close), contentDescription = "Remove Account")
-                    }
-                  } else {
-                    OutlinedButton(
-                      onClick = { showLogoutDialog = true },
-                      colors =
-                        ButtonDefaults.outlinedButtonColors(
-                          containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                          contentColor = MaterialTheme.colorScheme.onSurface
-                        )
-                    ) {
-                      Text(stringResource(R.string.action_logout))
-                    }
-                  }
-                },
-                onClick = {
-                  if (account.cookie != innerTubeCookie) {
-                    accountSettingsViewModel.saveTokenAndRestart(
-                      context = context,
-                      cookie = account.cookie,
-                      visitorData = account.visitorData,
-                      dataSyncId = account.dataSyncId,
-                      accountName = account.name,
-                      accountEmail = account.email,
-                      accountChannelHandle = account.channelHandle
-                    )
-                  }
-                }
-              )
-            } +
-              listOf(
-                Material3SettingsItem(
-                  icon = painterResource(R.drawable.add),
-                  title = { Text("Add another account") },
-                  onClick = { navController.navigate("login") }
-                )
-              )
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-      } else {
-        Material3SettingsGroup(
-          scrollState = scrollState,
-          title = "Accounts",
-          items =
-            listOf(
-              Material3SettingsItem(
-                icon =
-                  if (isLoggedIn && !accountImageUrl.isNullOrBlank()) null
-                  else painterResource(R.drawable.login),
-                title = {
-                  Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (isLoggedIn && !accountImageUrl.isNullOrBlank()) {
-                      AsyncImage(
-                        model = accountImageUrl,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.size(40.dp).clip(CircleShape)
-                      )
-                      Spacer(modifier = Modifier.width(12.dp))
-                    }
-                    Text(
-                      text = if (isLoggedIn) accountName else "Log In",
-                      color = MaterialTheme.colorScheme.primary,
-                      style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold)
-                    )
-                  }
-                },
-                trailingContent =
-                  if (isLoggedIn)
-                    ({
-                      OutlinedButton(
-                        onClick = { showLogoutDialog = true },
-                        colors =
-                          ButtonDefaults.outlinedButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                            contentColor = MaterialTheme.colorScheme.onSurface
-                          )
-                      ) {
-                        Text(stringResource(R.string.action_logout))
-                      }
-                    })
-                  else null,
-                onClick = { if (!isLoggedIn) navController.navigate("login") }
-              )
-            ) +
-              if (isLoggedIn) {
-                listOf(
-                  Material3SettingsItem(
-                    icon = painterResource(R.drawable.add),
-                    title = { Text("Add another account") },
-                    onClick = { navController.navigate("login") }
-                  )
-                )
-              } else emptyList()
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-      }
+      val museDisplayName = customUsername
+        ?: museUser?.displayName?.takeIf { it.isNotBlank() }
+        ?: museUser?.email?.substringBefore("@")?.takeIf { it.isNotBlank() }
+        ?: "Muse User"
 
       Material3SettingsGroup(
         scrollState = scrollState,
-        title = stringResource(R.string.advanced_login),
-        items =
+        title = "Muse Account",
+        items = if (museUser != null) {
           listOf(
             Material3SettingsItem(
-              isHighlighted =
-                (highlightKey == stringResource(R.string.advanced_login) ||
-                  highlightKey == stringResource(R.string.token_shown) ||
-                  highlightKey == stringResource(R.string.token_hidden)),
-              icon = painterResource(R.drawable.token),
+              icon = null,
               title = {
-                Text(
-                  when {
-                    !isLoggedIn -> stringResource(R.string.advanced_login)
-                    showToken -> stringResource(R.string.token_shown)
-                    else -> stringResource(R.string.token_hidden)
+                Row(
+                  verticalAlignment = Alignment.CenterVertically,
+                  modifier = Modifier.fillMaxWidth()
+                ) {
+                  if (!museUser?.photoUrl?.toString().isNullOrBlank()) {
+                    AsyncImage(
+                      model = museUser?.photoUrl?.toString(),
+                      contentDescription = null,
+                      contentScale = ContentScale.Crop,
+                      modifier = Modifier.size(44.dp).clip(CircleShape)
+                    )
+                  } else {
+                    Surface(
+                      shape = CircleShape,
+                      color = MaterialTheme.colorScheme.primaryContainer,
+                      modifier = Modifier.size(44.dp)
+                    ) {
+                      Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                          painter = painterResource(R.drawable.person),
+                          contentDescription = null,
+                          tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                          modifier = Modifier.size(24.dp)
+                        )
+                      }
+                    }
                   }
-                )
+                  Spacer(modifier = Modifier.width(12.dp))
+                  Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                      text = museDisplayName,
+                      style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                      color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (!museUser?.email.isNullOrBlank()) {
+                      Text(
+                        text = museUser?.email ?: "",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                      )
+                    }
+                  }
+                  IconButton(
+                    onClick = {
+                      editUsernameText = museDisplayName
+                      showEditUsernameDialog = true
+                    }
+                  ) {
+                    Icon(
+                      painter = painterResource(R.drawable.edit),
+                      contentDescription = "Edit Username",
+                      tint = MaterialTheme.colorScheme.primary
+                    )
+                  }
+                }
               },
+              trailingContent = null,
               onClick = {
-                if (!isLoggedIn) showTokenEditor = true
-                else if (!showToken) showToken = true else showTokenEditor = true
+                editUsernameText = museDisplayName
+                showEditUsernameDialog = true
+              }
+            ),
+            Material3SettingsItem(
+              icon = painterResource(R.drawable.edit),
+              title = { Text("Change Username") },
+              description = { Text(museDisplayName) },
+              onClick = {
+                editUsernameText = museDisplayName
+                showEditUsernameDialog = true
+              }
+            ),
+            Material3SettingsItem(
+              icon = painterResource(R.drawable.logout),
+              title = { Text("Sign Out", color = MaterialTheme.colorScheme.error) },
+              onClick = {
+                MuseAuthManager.signOut(context)
               }
             )
           )
+        } else {
+          listOf(
+            Material3SettingsItem(
+              icon = painterResource(R.drawable.ic_google),
+              title = { Text("Sign In with Google") },
+              description = { Text("Sync your streaks, play counts, and playlists") },
+              onClick = {
+                MuseAuthManager.triggerLoginDialog()
+              }
+            )
+          )
+        }
       )
-
       Spacer(modifier = Modifier.height(16.dp))
 
-      if (isLoggedIn) {
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Material3SettingsGroup(
-          scrollState = scrollState,
-          title = stringResource(R.string.settings_section_player_content),
-          items =
-            listOf(
-              Material3SettingsItem(
-                isHighlighted = (highlightKey == stringResource(R.string.more_content)),
-                icon = painterResource(R.drawable.add_circle),
-                title = { Text(stringResource(R.string.more_content)) },
-                description = { Text(stringResource(R.string.more_content_desc)) },
-                trailingContent = {
-                  Switch(
-                    checked = useLoginForBrowse,
-                    onCheckedChange = {
-                      YouTube.useLoginForBrowse = it
-                      onUseLoginForBrowseChange(it)
-                    },
-                    thumbContent = {
-                      Icon(
-                        painter =
-                          painterResource(
-                            id = if (useLoginForBrowse) R.drawable.check else R.drawable.close
-                          ),
-                        contentDescription = null,
-                        modifier = Modifier.size(SwitchDefaults.IconSize),
-                      )
-                    }
-                  )
-                },
-                onClick = {
-                  val newValue = !useLoginForBrowse
-                  YouTube.useLoginForBrowse = newValue
-                  onUseLoginForBrowseChange(newValue)
-                }
-              ),
-              Material3SettingsItem(
-                isHighlighted = (highlightKey == stringResource(R.string.yt_sync)),
-                icon = painterResource(R.drawable.cached),
-                title = { Text(stringResource(R.string.yt_sync)) },
-                description = { Text(stringResource(R.string.yt_sync_desc)) },
-                trailingContent = {
-                  Switch(
-                    checked = ytmSync,
-                    onCheckedChange = onYtmSyncChange,
-                    thumbContent = {
-                      Icon(
-                        painter =
-                          painterResource(id = if (ytmSync) R.drawable.check else R.drawable.close),
-                        contentDescription = null,
-                        modifier = Modifier.size(SwitchDefaults.IconSize),
-                      )
-                    }
-                  )
-                },
-                onClick = { onYtmSyncChange(!ytmSync) }
+      if (showEditUsernameDialog) {
+        AlertDialog(
+          onDismissRequest = {
+            if (!isUpdatingUsername) showEditUsernameDialog = false
+          },
+          title = { Text("Change Username") },
+          text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+              Text(
+                text = "Enter your display name for Muse Music:",
+                style = MaterialTheme.typography.bodyMedium
               )
-            )
+              OutlinedTextField(
+                value = editUsernameText,
+                onValueChange = { editUsernameText = it },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("Your name") }
+              )
+            }
+          },
+          confirmButton = {
+            Button(
+              enabled = editUsernameText.trim().isNotEmpty() && !isUpdatingUsername,
+              onClick = {
+                val newName = editUsernameText.trim()
+                isUpdatingUsername = true
+                MuseAuthManager.updateUsername(
+                  newName = newName,
+                  onSuccess = {
+                    isUpdatingUsername = false
+                    showEditUsernameDialog = false
+                    Toast.makeText(context, "Username updated", Toast.LENGTH_SHORT).show()
+                  },
+                  onError = { e ->
+                    isUpdatingUsername = false
+                    Toast.makeText(context, "Update failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                  }
+                )
+              }
+            ) {
+              if (isUpdatingUsername) {
+                CircularProgressIndicator(
+                  modifier = Modifier.size(18.dp),
+                  strokeWidth = 2.dp,
+                  color = MaterialTheme.colorScheme.onPrimary
+                )
+              } else {
+                Text("Save")
+              }
+            }
+          },
+          dismissButton = {
+            TextButton(
+              enabled = !isUpdatingUsername,
+              onClick = { showEditUsernameDialog = false }
+            ) {
+              Text("Cancel")
+            }
+          }
         )
-
-        Spacer(modifier = Modifier.height(16.dp))
       }
+
+      val fcmToken by MuseAuthManager.fcmToken.collectAsState()
 
       Material3SettingsGroup(
         scrollState = scrollState,
-        title = stringResource(R.string.integrations),
-        items =
-          listOf(
-            Material3SettingsItem(
-              isHighlighted = (highlightKey == "Spotify"),
-              icon = painterResource(R.drawable.ic_spotify),
-              title = { Text("Spotify") },
-              description = { Text("Connect Spotify for recommendations") },
-              onClick = { navController.navigate("settings/spotify_import") }
-            ),
-            Material3SettingsItem(
-              isHighlighted = (highlightKey == stringResource(R.string.discord)),
-              icon = painterResource(R.drawable.discord),
-              title = { Text(stringResource(R.string.discord)) },
-              description = { Text(stringResource(R.string.discord_integration_desc)) },
-              onClick = { navController.navigate("settings/discord") }
-            ),
-            Material3SettingsItem(
-              isHighlighted = (highlightKey == stringResource(R.string.lastfm_integration)),
-              icon = painterResource(R.drawable.ic_lastfm),
-              title = { Text(stringResource(R.string.lastfm_integration)) },
-              description = { Text(stringResource(R.string.lastfm_integration_desc)) },
-              onClick = { navController.navigate("settings/lastfm") }
-            )
+        title = "Notifications & Sync",
+        items = listOf(
+          Material3SettingsItem(
+            icon = painterResource(R.drawable.notification),
+            title = { Text("Send Test Notification") },
+            description = { Text("Check push notifications on this device") },
+            onClick = {
+              echo.music.iad1tya.auth.MuseNotificationService.sendNotification(
+                context = context,
+                title = "Muse Music \uD83D\uDD25",
+                message = "Hello $museDisplayName! Your streak is active. Keep listening! \uD83C\uDFB5"
+              )
+              Toast.makeText(context, "Test notification sent! Check notification bar", Toast.LENGTH_SHORT).show()
+            }
+          ),
+          Material3SettingsItem(
+            icon = painterResource(R.drawable.content_copy),
+            title = { Text("Copy FCM Device Token") },
+            description = {
+              Text(
+                if (fcmToken != null) "Token: ${fcmToken?.take(16)}... (Tap to copy)"
+                else "Tap to retrieve and copy FCM token"
+              )
+            },
+            onClick = {
+              val token = fcmToken
+              if (!token.isNullOrBlank()) {
+                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                val clip = android.content.ClipData.newPlainText("FCM Token", token)
+                clipboard.setPrimaryClip(clip)
+                Toast.makeText(context, "FCM Token copied to clipboard!", Toast.LENGTH_SHORT).show()
+              } else {
+                com.google.firebase.messaging.FirebaseMessaging.getInstance().token.addOnSuccessListener { newToken ->
+                  val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                  val clip = android.content.ClipData.newPlainText("FCM Token", newToken)
+                  clipboard.setPrimaryClip(clip)
+                  Toast.makeText(context, "FCM Token copied to clipboard!", Toast.LENGTH_SHORT).show()
+                }.addOnFailureListener {
+                  Toast.makeText(context, "Failed to get FCM token: ${it.message}", Toast.LENGTH_SHORT).show()
+                }
+              }
+            }
           )
-      )
-    }
-
-    if (showTokenEditor) {
-      val text =
-        """
-                ***INNERTUBE COOKIE*** =$innerTubeCookie
-                ***VISITOR DATA*** =$visitorData
-                ***DATASYNC ID*** =$dataSyncId
-                ***ACCOUNT NAME*** =$accountNamePref
-                ***ACCOUNT EMAIL*** =$accountEmail
-                ***ACCOUNT CHANNEL HANDLE*** =$accountChannelHandle
-            """
-          .trimIndent()
-
-      TextFieldDialog(
-        initialTextFieldValue = TextFieldValue(text),
-        onDone = { data ->
-          var cookie = ""
-          var visitorDataValue = ""
-          var dataSyncIdValue = ""
-          var accountNameValue = ""
-          var accountEmailValue = ""
-          var accountChannelHandleValue = ""
-
-          data.split("\n").forEach {
-            when {
-              it.startsWith("***INNERTUBE COOKIE*** =") -> cookie = it.substringAfter("=")
-              it.startsWith("***VISITOR DATA*** =") -> visitorDataValue = it.substringAfter("=")
-              it.startsWith("***DATASYNC ID*** =") -> dataSyncIdValue = it.substringAfter("=")
-              it.startsWith("***ACCOUNT NAME*** =") -> accountNameValue = it.substringAfter("=")
-              it.startsWith("***ACCOUNT EMAIL*** =") -> accountEmailValue = it.substringAfter("=")
-              it.startsWith("***ACCOUNT CHANNEL HANDLE*** =") ->
-                accountChannelHandleValue = it.substringAfter("=")
-            }
-          }
-          accountSettingsViewModel.saveTokenAndRestart(
-            context = context,
-            cookie = cookie,
-            visitorData = visitorDataValue,
-            dataSyncId = dataSyncIdValue,
-            accountName = accountNameValue,
-            accountEmail = accountEmailValue,
-            accountChannelHandle = accountChannelHandleValue,
-          )
-        },
-        onDismiss = { showTokenEditor = false },
-        singleLine = false,
-        maxLines = 8,
-        isInputValid = { fullText ->
-          val cookieLine = fullText.lines().find { it.startsWith("***INNERTUBE COOKIE*** =") }
-          val cookieValue = cookieLine?.substringAfter("***INNERTUBE COOKIE*** =")?.trim() ?: ""
-          cookieValue.isNotEmpty() && "SAPISID" in parseCookieString(cookieValue)
-        },
-        extraContent = { InfoLabel(text = stringResource(R.string.token_adv_login_description)) }
-      )
-    }
-    if (showLogoutDialog) {
-      DefaultDialog(
-        onDismiss = { showLogoutDialog = false },
-        title = { Text(stringResource(R.string.logout_dialog_title)) },
-        buttons = {
-          Column(
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-          ) {
-            Button(
-              onClick = {
-                accountSettingsViewModel.logoutKeepData(context, onInnerTubeCookieChange)
-                showLogoutDialog = false
-                navController.navigateUp()
-              },
-              modifier = Modifier.fillMaxWidth()
-            ) {
-              Text(stringResource(R.string.logout_keep_data))
-            }
-
-            FilledTonalButton(
-              onClick = {
-                accountSettingsViewModel.logoutAndClearSyncedContent(
-                  context,
-                  onInnerTubeCookieChange
-                )
-                showLogoutDialog = false
-              },
-              modifier = Modifier.fillMaxWidth(),
-              colors =
-                ButtonDefaults.filledTonalButtonColors(
-                  contentColor = MaterialTheme.colorScheme.error
-                )
-            ) {
-              Text(stringResource(R.string.logout_clear_data))
-            }
-
-            TextButton(onClick = { showLogoutDialog = false }, modifier = Modifier.fillMaxWidth()) {
-              Text(stringResource(android.R.string.cancel))
-            }
-          }
-        }
-      ) {
-        Text(
-          text = stringResource(R.string.logout_dialog_message),
-          style = MaterialTheme.typography.bodyMedium,
-          modifier = Modifier.padding(bottom = 8.dp)
         )
-      }
-    }
-
-    if (showListenBrainzTokenEditor) {
-      TextFieldDialog(
-        initialTextFieldValue = TextFieldValue(listenBrainzToken),
-        onDone = { data ->
-          onListenBrainzTokenChange(data)
-          showListenBrainzTokenEditor = false
-        },
-        onDismiss = { showListenBrainzTokenEditor = false },
-        singleLine = true,
-        maxLines = 1,
-        isInputValid = { it.isNotEmpty() },
-        extraContent = {
-          InfoLabel(text = stringResource(R.string.listenbrainz_scrobbling_description))
-        }
       )
     }
+
+    Spacer(Modifier.height(100.dp))
 
     Spacer(Modifier.height(100.dp))
     Spacer(

@@ -34,7 +34,8 @@ fun UpdateAvailableDialog(
   version: String,
   changelog: List<ChangelogSection>,
   description: String?,
-  onDismiss: () -> Unit
+  onDismiss: () -> Unit,
+  onUpdate: (() -> Unit)? = null
 ) {
   val context = LocalContext.current
   val cardShape =
@@ -196,9 +197,13 @@ fun UpdateAvailableDialog(
           Button(
             onClick = {
               onDismiss()
-              val intent =
-                Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://echomusic.fun"))
-              context.startActivity(intent)
+              if (onUpdate != null) {
+                onUpdate()
+              } else {
+                val intent =
+                  Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/abhiyank-mishra/muse/releases/latest"))
+                context.startActivity(intent)
+              }
             },
             shape = actionShape,
           ) {

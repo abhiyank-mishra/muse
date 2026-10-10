@@ -15,8 +15,16 @@ import echo.music.iad1tya.echomusic.AudioDeviceBottomSheet
 import android.view.HapticFeedbackConstants
 import android.view.View
 import android.view.WindowManager
+import android.app.Activity
+import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.common.api.ApiException
+import echo.music.iad1tya.auth.MuseAuthManager
+import echo.music.iad1tya.ui.component.MuseLoginDialog
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateDpAsState
@@ -25,10 +33,14 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -223,7 +235,9 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -342,6 +356,9 @@ class MainActivity : ComponentActivity() {
     super.onNewIntent(intent)
     setIntent(intent)
     if (::navController.isInitialized) {
+      if (intent.getStringExtra("navigate_to") == "update") {
+        navController.navigate("update")
+      }
       handleDeepLinkIntent(intent, navController)
       handleRecognitionIntent(intent, navController)
       handleAssistantSearchIntent(intent, navController)
@@ -462,6 +479,8 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    MuseAuthManager.init(this)
+
     setContent {
       echomusicApp(
         playerConnection = playerConnection,
@@ -496,10 +515,138 @@ class MainActivity : ComponentActivity() {
     var availableUpdateDescription by remember {
       androidx.compose.runtime.mutableStateOf<String?>(null)
     }
+    var availableUpdateApkUrl by remember {
+      androidx.compose.runtime.mutableStateOf<String?>(null)
+    }
+    var availableUpdateSize by remember {
+      androidx.compose.runtime.mutableStateOf<String?>(null)
+    }
     var whatsNewInfo by remember {
       androidx.compose.runtime.mutableStateOf<echo.music.iad1tya.echomusic.updater.WhatsNewInfo?>(
         null
       )
+    }
+
+    val showLoginDialog by MuseAuthManager.showLoginDialog.collectAsState()
+    val isGuestLimitReached by MuseAuthManager.isGuestLimitReached.collectAsState()
+    var isSigningIn by remember { androidx.compose.runtime.mutableStateOf(false) }
+
+    var showSplashScreen by rememberSaveable { mutableStateOf(true) }
+
+    LaunchedEffect(Unit) {
+      kotlinx.coroutines.delay(1000)
+      showSplashScreen = false
+    }
+
+    val googleSignInLauncher = rememberLauncherForActivityResult(
+      contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+      val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+      try {
+        val account = task.getResult(ApiException::class.java)
+        if (account != null) {
+          MuseAuthManager.handleGoogleSignInResult(
+            account = account,
+            onSuccess = {
+              isSigningIn = false
+              Toast.makeText(context, "Welcome ${account.displayName ?: "back"}!", Toast.LENGTH_SHORT).show()
+            },
+            onError = { e ->
+              isSigningIn = false
+              Toast.makeText(context, "Sign-in error: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+          )
+        } else {
+          isSigningIn = false
+        }
+      } catch (e: ApiException) {
+        isSigningIn = false
+        Timber.tag("MuseAuth").e(e, "Google Sign-in failed with code ${e.statusCode}")
+        val errDesc = when (e.statusCode) {
+          10 -> "SHA-1 missing in Firebase Console (Error 10)"
+          12500 -> "Sign-in failed (12500). Check Google Play Services"
+          7 -> "Network error (7). Check your internet connection"
+          else -> "Error code ${e.statusCode}: ${e.message}"
+        }
+        Toast.makeText(context, "Google Sign-in: $errDesc", Toast.LENGTH_LONG).show()
+      } catch (e: Exception) {
+        isSigningIn = false
+        Toast.makeText(context, "Sign-in failed: ${e.message}", Toast.LENGTH_SHORT).show()
+      }
+    }
+
+    LaunchedEffect(playerConnection) {
+      val playerConnection = playerConnection ?: return@LaunchedEffect
+      var currentSongId: String? = null
+      var countedSongId: String? = null
+      var accumulatedMs = 0L
+      var lastTickMs = android.os.SystemClock.elapsedRealtime()
+
+      while (isActive) {
+        val song = playerConnection.service.currentMediaMetadata.value
+        val isPlaying = playerConnection.isPlaying.value
+
+        if (song != null) {
+          // If guest limit reached and user not logged in, enforce pause immediately
+          if (MuseAuthManager.isGuestLimitReached.value && MuseAuthManager.currentUser.value == null) {
+            if (isPlaying) {
+              try {
+                playerConnection.player.pause()
+              } catch (_: Exception) {}
+              MuseAuthManager.triggerLoginDialog(limitReached = true)
+            }
+          }
+
+          if (song.id != currentSongId) {
+            currentSongId = song.id
+            countedSongId = null
+            accumulatedMs = 0L
+            lastTickMs = android.os.SystemClock.elapsedRealtime()
+          }
+
+          val now = android.os.SystemClock.elapsedRealtime()
+          if (isPlaying) {
+            val delta = (now - lastTickMs).coerceAtLeast(0L)
+            accumulatedMs += delta
+            lastTickMs = now
+
+            // Count song play only if played for at least 30 seconds
+            if (accumulatedMs >= 30_000L && countedSongId != song.id) {
+              countedSongId = song.id
+              val title = song.title.ifEmpty { "Unknown Title" }
+              val artist = song.artists.joinToString(", ") { it.name }.ifEmpty { "Unknown Artist" }
+              val artworkUrl = song.thumbnailUrl
+              val album = song.album?.title
+              val duration = song.duration.toLong()
+
+              val limitReached = MuseAuthManager.onSongPlayed(
+                context = context,
+                songId = song.id,
+                title = title,
+                artist = artist,
+                artworkUrl = artworkUrl,
+                album = album,
+                duration = duration
+              )
+
+              if (limitReached) {
+                try {
+                  playerConnection.player.pause()
+                } catch (_: Exception) {}
+              }
+            }
+          } else {
+            lastTickMs = now
+          }
+        } else {
+          currentSongId = null
+          countedSongId = null
+          accumulatedMs = 0L
+          lastTickMs = android.os.SystemClock.elapsedRealtime()
+        }
+
+        delay(500L)
+      }
     }
 
     LaunchedEffect(Unit) {
@@ -528,97 +675,27 @@ class MainActivity : ComponentActivity() {
     }
 
     LaunchedEffect(Unit) {
-      val prefs = context.dataStore.data.first()
-
       if (getAutoUpdateCheckSetting(context)) {
-
-        delay(2000L)
         checkForUpdate(
           context = context,
-          onSuccess = { latestVersion, isAvailable, changelog, _, _, description, _, _ ->
-            val currentVersion = BuildConfig.VERSION_NAME
-            Log.d(
-              "UpdateCheck",
-              "Startup check success. Latest: $latestVersion, Current: $currentVersion, isAvailable: $isAvailable"
-            )
+          onSuccess = { tag, isAvailable, changelog, size, _, description, _, apkUrl ->
             saveUpdateAvailableState(context, isAvailable)
-
             if (isAvailable) {
-              availableUpdateVersion = latestVersion
+              availableUpdateVersion = tag
               availableUpdateChangelog = changelog
               availableUpdateDescription = description
+              availableUpdateApkUrl = apkUrl
+              availableUpdateSize = size
               showUpdateDialog = true
             }
 
             if (isAvailable && getUpdateNotificationsSetting(context)) {
-              Log.d("UpdateCheck", "Posting update notification for $latestVersion")
-              UpdateNotificationHelper.showUpdateNotification(context, latestVersion)
+              android.util.Log.d("UpdateCheck", "Posting update notification for $tag")
+              UpdateNotificationHelper.showUpdateNotification(context, tag)
             }
           },
-          onError = { Log.e("UpdateCheck", "Startup check failed") }
+          onError = { android.util.Log.e("UpdateCheck", "Startup check failed") }
         )
-      }
-    }
-
-    val HasShownBirthdayNotificationKey = remember {
-      androidx.datastore.preferences.core.booleanPreferencesKey("has_shown_birthday_notification")
-    }
-    LaunchedEffect(Unit) {
-      val today = java.time.LocalDate.now()
-      if (today.month == java.time.Month.OCTOBER && today.dayOfMonth == 14) {
-        val prefs = context.dataStore.data.first()
-        val hasShown = prefs[HasShownBirthdayNotificationKey] ?: false
-        if (!hasShown) {
-          if (
-            android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU ||
-              androidx.core.content.ContextCompat.checkSelfPermission(
-                context,
-                android.Manifest.permission.POST_NOTIFICATIONS
-              ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-          ) {
-
-            val channelId = "birthday_channel"
-            val notificationManager =
-              context.getSystemService(android.app.NotificationManager::class.java)
-
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-              val channel =
-                android.app.NotificationChannel(
-                  channelId,
-                  "Birthday",
-                  android.app.NotificationManager.IMPORTANCE_HIGH
-                )
-              notificationManager.createNotificationChannel(channel)
-            }
-
-            val bitmap =
-              android.graphics.BitmapFactory.decodeResource(
-                context.resources,
-                R.drawable.birthday_image
-              )
-
-            val notification =
-              androidx.core.app.NotificationCompat.Builder(context, channelId)
-                .setSmallIcon(R.drawable.echomusicnotification) // Use correct transparent echo icon
-                .setContentTitle("Happy Birthday Aditya!")
-                .setContentText("Today is the developer's birthday!")
-                .setLargeIcon(bitmap)
-                .setStyle(
-                  androidx.core.app.NotificationCompat.BigPictureStyle()
-                    .bigPicture(bitmap)
-                    .bigLargeIcon(null as android.graphics.Bitmap?)
-                )
-                .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
-                .setAutoCancel(true)
-                .build()
-
-            notificationManager.notify(1014, notification)
-
-            context.dataStore.edit { preferences ->
-              preferences[HasShownBirthdayNotificationKey] = true
-            }
-          }
-        }
       }
     }
 
@@ -721,7 +798,18 @@ class MainActivity : ComponentActivity() {
           version = availableUpdateVersion,
           changelog = availableUpdateChangelog,
           description = availableUpdateDescription,
-          onDismiss = { showUpdateDialog = false }
+          onDismiss = { showUpdateDialog = false },
+          onUpdate = {
+            showUpdateDialog = false
+            echo.music.iad1tya.echomusic.updater.startUpdateDownload(
+              context = context,
+              version = availableUpdateVersion,
+              apkUrl = availableUpdateApkUrl,
+              size = availableUpdateSize
+            )
+            android.widget.Toast.makeText(context, "Downloading update...", android.widget.Toast.LENGTH_SHORT).show()
+            navController.navigate("update")
+          }
         )
       } else {
         whatsNewInfo?.let { info ->
@@ -738,6 +826,29 @@ class MainActivity : ComponentActivity() {
           )
         }
       }
+
+      if (showLoginDialog) {
+        MuseLoginDialog(
+          isLimitReached = isGuestLimitReached,
+          isLoading = isSigningIn,
+          onGoogleSignIn = {
+            isSigningIn = true
+            val client = MuseAuthManager.getGoogleSignInClient(context)
+            googleSignInLauncher.launch(client.signInIntent)
+          },
+          onDismiss = {
+            if (isGuestLimitReached) {
+              try {
+                playerConnection?.player?.pause()
+              } catch (_: Exception) {}
+              MuseAuthManager.forceDismissDialog()
+            } else {
+              MuseAuthManager.dismissLoginDialog()
+            }
+          }
+        )
+      }
+
       BoxWithConstraints(
         modifier =
           Modifier.fillMaxSize()
@@ -774,6 +885,7 @@ class MainActivity : ComponentActivity() {
         }
         val homeViewModel: HomeViewModel = hiltViewModel()
         val accountImageUrl by homeViewModel.accountImageUrl.collectAsState()
+        val museUser by MuseAuthManager.currentUser.collectAsState()
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val onRailSearchLongClick: () -> Unit =
           remember(navController) {
@@ -1057,15 +1169,14 @@ class MainActivity : ComponentActivity() {
         var showWelcomeDialog by remember { mutableStateOf(false) }
 
         LaunchedEffect(Unit) {
-          val prefs = context.dataStore.data.first()
-          val lastOpened = prefs[echo.music.iad1tya.constants.LastOpenedVersionCodeKey] ?: -1
-          if (lastOpened < BuildConfig.VERSION_CODE) {
-            showWelcomeDialog = true
-          }
+          // Welcome dialog disabled
         }
 
         LaunchedEffect(Unit) {
           val activeIntent = pendingIntent ?: intent
+          if (activeIntent?.getStringExtra("navigate_to") == "update") {
+            navController.navigate("update")
+          }
           if (activeIntent != null) {
             handleWidgetAction(activeIntent)
           }
@@ -1110,7 +1221,7 @@ class MainActivity : ComponentActivity() {
 
         val currentTitle =
           when (navBackStackEntry?.destination?.route) {
-            Screens.Home.route -> "Echo Music"
+            Screens.Home.route -> "Muse Music"
             Screens.Search.route -> stringResource(R.string.search)
             Screens.Library.route -> stringResource(R.string.filter_library)
             Screens.ListenTogether.route -> stringResource(R.string.together)
@@ -1276,9 +1387,10 @@ class MainActivity : ComponentActivity() {
                       }
                       IconButton(onClick = { showSettingDialoge = true }) {
                         BadgedBox(badge = {}) {
-                          if (accountImageUrl != null) {
+                          val displayAvatar = accountImageUrl ?: museUser?.photoUrl?.toString()
+                          if (displayAvatar != null) {
                             AsyncImage(
-                              model = accountImageUrl,
+                              model = displayAvatar,
                               contentDescription = stringResource(R.string.account),
                               modifier = Modifier.size(24.dp).clip(CircleShape)
                             )
@@ -1792,6 +1904,57 @@ class MainActivity : ComponentActivity() {
                   }
                 }
             )
+          }
+        }
+
+        AnimatedVisibility(
+          visible = showSplashScreen,
+          enter = fadeIn(),
+          exit = fadeOut(animationSpec = tween(400))
+        ) {
+          Box(
+            modifier = Modifier
+              .fillMaxSize()
+              .background(Color(0xFF0B0B0F))
+              .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+              ) {}
+          ) {
+            Image(
+              painter = painterResource(R.drawable.ic_splash_logo),
+              contentDescription = "Muse Logo",
+              modifier = Modifier
+                .size(130.dp)
+                .align(Alignment.Center)
+            )
+            Column(
+              modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(bottom = 36.dp),
+              horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+              Text(
+                text = "Muse Music",
+                style = MaterialTheme.typography.titleMedium.copy(
+                  color = Color.White,
+                  fontSize = 20.sp,
+                  fontWeight = FontWeight.Bold,
+                  letterSpacing = 1.2.sp
+                )
+              )
+              Text(
+                text = "by Abhiyank",
+                style = MaterialTheme.typography.bodySmall.copy(
+                  color = Color(0xFFC8C8D7),
+                  fontSize = 12.sp,
+                  fontWeight = FontWeight.Normal,
+                  letterSpacing = 0.8.sp
+                ),
+                modifier = Modifier.padding(top = 4.dp)
+              )
+            }
           }
         }
       }

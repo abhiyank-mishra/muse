@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <style name="Theme.App.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#0B0B0F</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/transparent_splash_icon</item>
+        <item name="postSplashScreenTheme">@style/Theme.echomusic</item>
+    </style>
+
     <!-- Widget Theme for Android 12+ with Dynamic Colors -->
     <style name="Theme.Widget.echomusic" parent="@android:style/Theme.DeviceDefault.DayNight" />
 </resources>

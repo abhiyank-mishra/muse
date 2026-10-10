@@ -284,33 +284,6 @@ fun SettingsScreen(
           )
         )
       }
-      if (
-        systemUpdateText.lowercase().contains(searchLower) ||
-          systemUpdateDesc.lowercase().contains(searchLower)
-      ) {
-        add(
-          Material3SettingsItem(
-            isHighlighted = (highlightKey == systemUpdateText),
-            icon =
-              painterResource(
-                if (isUpdateAvailable) R.drawable.ic_launcher_nobg else R.drawable.update
-              ),
-            title = { Text(systemUpdateText) },
-            description =
-              if (isUpdateAvailable) {
-                {
-                  Text(
-                    text = stringResource(R.string.update_available),
-                    color = MaterialTheme.colorScheme.error
-                  )
-                }
-              } else {
-                { Text(systemUpdateDesc) }
-              },
-            onClick = { navController.navigate("settings/update") }
-          )
-        )
-      }
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         if ("supported links".contains(searchLower)) {
           add(

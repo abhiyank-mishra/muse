@@ -44,12 +44,35 @@ class UpdateDownloadWorker(private val context: Context, workerParams: WorkerPar
       } catch (e: Exception) {}
 
       try {
-        val url = URL(apkUrl)
-        val connection = url.openConnection() as HttpURLConnection
-        connection.requestMethod = "GET"
-        connection.connectTimeout = 15000
-        connection.readTimeout = 15000
-        connection.connect()
+        var currentUrl = apkUrl
+        var connection: HttpURLConnection
+        var redirectCount = 0
+        while (true) {
+          val url = URL(currentUrl)
+          connection = url.openConnection() as HttpURLConnection
+          connection.requestMethod = "GET"
+          connection.connectTimeout = 15000
+          connection.readTimeout = 15000
+          connection.instanceFollowRedirects = true
+          connection.setRequestProperty("User-Agent", "Muse-Updater")
+          connection.connect()
+
+          val code = connection.responseCode
+          if (code == HttpURLConnection.HTTP_MOVED_PERM ||
+              code == HttpURLConnection.HTTP_MOVED_TEMP ||
+              code == HttpURLConnection.HTTP_SEE_OTHER ||
+              code == 307 || code == 308
+          ) {
+            val location = connection.getHeaderField("Location")
+            if (location != null && redirectCount < 5) {
+              currentUrl = location
+              redirectCount++
+              connection.disconnect()
+              continue
+            }
+          }
+          break
+        }
 
         if (connection.responseCode != HttpURLConnection.HTTP_OK) {
           DownloadNotificationManager.showDownloadFailed(
@@ -66,14 +89,14 @@ class UpdateDownloadWorker(private val context: Context, workerParams: WorkerPar
         val inputStream = connection.inputStream
 
         val downloadDir =
-          File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "echo_updates")
+          File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "muse_updates")
         if (!downloadDir.exists()) {
           downloadDir.mkdirs()
         }
 
         val isZip = apkUrl.contains("nightly.link") || apkUrl.endsWith(".zip")
         val downloadFile =
-          if (isZip) File(downloadDir, "echo_temp.zip") else File(downloadDir, "echomusic.apk")
+          if (isZip) File(downloadDir, "muse_temp.zip") else File(downloadDir, "Muse.Music.apk")
         val outputStream = FileOutputStream(downloadFile)
 
         val buffer = ByteArray(8192)
@@ -126,7 +149,7 @@ class UpdateDownloadWorker(private val context: Context, workerParams: WorkerPar
 
         val finalFile =
           if (isZip) {
-            val targetApkFile = File(downloadDir, "echomusic.apk")
+            val targetApkFile = File(downloadDir, "Muse.Music.apk")
             var extracted = false
             try {
               ZipInputStream(downloadFile.inputStream()).use { zis ->

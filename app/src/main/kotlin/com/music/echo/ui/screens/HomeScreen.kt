@@ -5,6 +5,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.horizontalScroll
@@ -49,6 +50,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.carousel.HorizontalCenteredHeroCarousel
 import androidx.compose.material3.carousel.HorizontalMultiBrowseCarousel
@@ -84,6 +86,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -101,6 +104,7 @@ import com.music.innertube.models.WatchEndpoint
 import com.music.innertube.models.YTItem
 import com.music.innertube.utils.completed
 import com.music.innertube.utils.parseCookieString
+import echo.music.iad1tya.auth.MuseAuthManager
 import echo.music.iad1tya.LocalDatabase
 import echo.music.iad1tya.LocalPlayerAwareWindowInsets
 import echo.music.iad1tya.LocalPlayerConnection
@@ -915,6 +919,13 @@ fun HomeScreen(
         modifier = Modifier.hapticScrollEdge(lazylistState),
         contentPadding = LocalPlayerAwareWindowInsets.current.asPaddingValues()
       ) {
+        item(key = "home_greeting_header") {
+          HomeGreetingHeader(
+            navController = navController,
+            modifier = Modifier.animateItem()
+          )
+        }
+
         item {
           ChipsRow(
             chips =
@@ -1864,3 +1875,124 @@ fun HomeScreen(
     }
   }
 }
+
+@Composable
+fun HomeGreetingHeader(
+  navController: NavController,
+  modifier: Modifier = Modifier
+) {
+  val museUser by MuseAuthManager.currentUser.collectAsState()
+  val customUsername by MuseAuthManager.customUsername.collectAsState()
+  val todayPlayCount by MuseAuthManager.todayPlayCount.collectAsState()
+  val currentStreak by MuseAuthManager.currentStreak.collectAsState()
+  val guestPlayCount by MuseAuthManager.guestPlayCount.collectAsState()
+
+  val greeting = remember {
+    val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+    when (hour) {
+      in 5..11 -> "Good Morning"
+      in 12..16 -> "Good Afternoon"
+      in 17..21 -> "Good Evening"
+      else -> "Good Night"
+    }
+  }
+
+  val rawName = customUsername
+    ?: museUser?.displayName?.takeIf { it.isNotBlank() }
+    ?: museUser?.email?.substringBefore("@")?.takeIf { it.isNotBlank() }
+    ?: "Music Lover"
+
+  val displayName = rawName.trim()
+
+  Row(
+    modifier = modifier
+      .fillMaxWidth()
+      .padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 8.dp),
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.SpaceBetween
+  ) {
+    Column(
+      modifier = Modifier
+        .weight(1f, fill = false)
+        .clip(RoundedCornerShape(8.dp))
+        .clickable {
+          navController.navigate("settings/account")
+        }
+    ) {
+      Text(
+        text = greeting,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+      )
+      Text(
+        text = displayName,
+        style = MaterialTheme.typography.titleLarge.copy(
+          fontWeight = FontWeight.Bold,
+          fontSize = 20.sp
+        ),
+        color = MaterialTheme.colorScheme.onSurface,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis
+      )
+    }
+
+    Spacer(modifier = Modifier.width(12.dp))
+
+    Row(
+      horizontalArrangement = Arrangement.spacedBy(8.dp),
+      verticalAlignment = Alignment.CenterVertically
+    ) {
+      // Streak Badge
+      Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        tonalElevation = 2.dp,
+        modifier = Modifier
+          .clip(RoundedCornerShape(20.dp))
+          .clickable {
+            navController.navigate("stats")
+          }
+      ) {
+        Row(
+          modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+          Text(text = "🔥", fontSize = 13.sp)
+          Text(
+            text = "$currentStreak",
+            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+            color = MaterialTheme.colorScheme.onSurface
+          )
+        }
+      }
+
+      // Songs Count Badge
+      val songCount = if (museUser != null) todayPlayCount else guestPlayCount
+      Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        tonalElevation = 2.dp,
+        modifier = Modifier
+          .clip(RoundedCornerShape(20.dp))
+          .clickable {
+            navController.navigate("history")
+          }
+      ) {
+        Row(
+          modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+          Text(text = "🎵", fontSize = 13.sp)
+          Text(
+            text = "$songCount",
+            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+            color = MaterialTheme.colorScheme.onSurface
+          )
+        }
+      }
+    }
+  }
+}
+
