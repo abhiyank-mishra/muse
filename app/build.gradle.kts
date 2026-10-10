@@ -30,7 +30,7 @@ android {
   ndkVersion = "28.2.13676358"
 
   defaultConfig {
-    applicationId = "echo.music.abhiyank"
+    applicationId = "echo.music.abhiyank.debug"
     minSdk = 26
     targetSdk = 36
     versionCode = 102
@@ -169,7 +169,6 @@ android {
       buildConfigField("String", "ARCHITECTURE", "\"release\"")
     }
     debug {
-      applicationIdSuffix = ".debug"
       isDebuggable = true
       signingConfig = signingConfigs.getByName("debug")
       buildConfigField("String", "ARCHITECTURE", "\"debug\"")
