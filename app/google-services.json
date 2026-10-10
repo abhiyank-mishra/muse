@@ -33,6 +33,35 @@
           ]
         }
       }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:196392808479:android:3c66e3429a4280935b652a",
+        "android_client_info": {
+          "package_name": "echo.music.abhiyank"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "196392808479-g2pg0edus8idnj20ca0mftcq0b6b70s9.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA5dWq4QSCK8AJCfHjtlN0_9vHTp31Aa1Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "196392808479-g2pg0edus8idnj20ca0mftcq0b6b70s9.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
     }
   ],
   "configuration_version": "1"
