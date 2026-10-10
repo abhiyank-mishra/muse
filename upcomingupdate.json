@@ -2,8 +2,13 @@
   "features": [
     "Local Taste Engine: Offline, account-free algorithmic recommendation engine with skip tracking and taste mix generation",
     "Local Taste Engine (Slice 2): Multi-source Last.fm recommendation pipeline (similar tracks, similar artists, top genres) with 1-hour taste snapshot caching and additive scoring bonuses",
-    "Local Taste Engine (Slice 3): Genre awareness with additive scoring bonus (+1.0), YouTube taste signals extraction, cross-screen generation status synchronization, and 'From Taste' quick action"
+    "Local Taste Engine (Slice 3): Genre awareness with additive scoring bonus (+1.0), YouTube taste signals extraction, cross-screen generation status synchronization, and 'From Taste' quick action",
+    "Share Lyrics as Video: Export selected lyrics (10s-60s / 1 min) as a high-quality video with trimmed audio, hardware-accelerated MediaCodec encoding, and real-time synchronized karaoke animation",
+    "Lyrics Video Export Enhancements: Kinetic smooth camera scrolling, dynamic ambient motion, equalizer frequency visualizer, real-time progress bar, and embedded video preview with direct Instagram Story, Instagram Direct, and WhatsApp sharing"
   ],
-  "bug_fixes": [],
+  "bug_fixes": [
+    "Fixed YouTube audio stream download throttling during lyrics snippet trimming",
+    "Fixed overlapping multiline lyrics text in video frame renderer"
+  ],
   "contributors": []
 }

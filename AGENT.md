@@ -349,3 +349,13 @@ The Local Taste Engine (`echo.music.iad1tya.generate`) provides offline, account
 ## Ambient Mode Canvas
 
 Ambient Mode keeps the existing album-art square and layers muted Canvas artwork inside that same clipped square. The normal album art remains underneath as the fallback; Canvas follows playback state and is non-interactive.
+
+## Lyrics Video Export with Synced Karaoke Animation
+
+The Lyrics Video Export engine (`echo.music.iad1tya.utils` & `echo.music.iad1tya.ui.component`) allows sharing selected lyrics snippets as high-resolution MP4 videos:
+- **Duration Constraint (10s – 60s / 1 min):** Enforced via `LyricsVideoUtils.calculateSelectedSnippet(...)` with live duration chips in the selection toolbar. Selections $< 10.0\text{s}$ or $> 60.0\text{s}$ disable the video share button with descriptive warning tooltips.
+- **Fast Audio Extraction & Micro-Fade Trimming:** `LyricsAudioTrimmer.kt` appends `&range=0-$totalLength` and `.proxy(YouTube.proxy)` to stream URLs to prevent YouTube CDN download throttling (~1s download time), decodes audio between the first line's timestamp ($T_{\text{start}}$) and the end timestamp ($T_{\text{end}}$), copies PCM samples to writable encoder buffers with 50ms linear micro-fades at cut boundaries to prevent pop/click noise, and encodes into AAC-LC (`audio/mp4a-latm`, 192kbps).
+- **Kinetic Smooth Camera Scrolling Renderer:** `LyricsVideoFrameRenderer.kt` renders 1080p frames (9:16 Story or 1:1 Square). Pre-measures multiline text layouts with exact heights to completely prevent text overlapping. Includes smooth kinetic camera scrolling that centers active lines with cosine interpolation, living ambient background zoom, 4 dancing harmonic equalizer frequency bars in the header, real-time snippet progress bar, and official app logo watermark (`R.drawable.ic_launcher_nobg`) without emojis.
+- **Hardware-Accelerated Video Encoder:** `LyricsVideoEncoder.kt` uses Android native `MediaCodec` (H.264 / `video/avc`, 30 FPS, 5 Mbps) with an internal EGL 14 window surface, multiplexed with the trimmed AAC audio track via `MediaMuxer` without third-party native libraries or APK size bloat.
+- **In-Dialog Video Preview & Social Share Sheet:** `LyricsVideoExportDialog.kt` provides an embedded looping ExoPlayer video preview with play/pause touch overlays, and an ultra-modern circular action share strip with direct one-tap intents for Instagram Stories (`com.instagram.share.ADD_TO_STORY`), Instagram Direct (`com.instagram.android`), WhatsApp (`com.whatsapp` / `com.whatsapp.w4b`), Save to Gallery (`MediaStore`), and More Apps (`Intent.createChooser`).
+

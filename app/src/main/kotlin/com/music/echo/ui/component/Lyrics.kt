@@ -548,6 +548,8 @@ fun Lyrics(
   var showProgressDialog by remember { mutableStateOf(false) }
   var showShareDialog by remember { mutableStateOf(false) }
   var shareDialogData by remember { mutableStateOf<Triple<String, String, String>?>(null) }
+  var showVideoExportDialog by remember { mutableStateOf(false) }
+  var videoSharePayload by remember { mutableStateOf<echo.music.iad1tya.utils.LyricsSharePayload?>(null) }
 
   var showColorPickerDialog by remember { mutableStateOf(false) }
   var previewBackgroundColor by remember { mutableStateOf(Color(0xFF242424)) }
@@ -2052,6 +2054,14 @@ fun Lyrics(
         enter = slideInVertically { it } + fadeIn(),
         exit = slideOutVertically { it } + fadeOut()
       ) {
+        val selectedSnippet = remember(selectedIndices.toList(), lines) {
+          echo.music.iad1tya.utils.LyricsVideoUtils.calculateSelectedSnippet(
+            lines = lines,
+            selectedIndices = selectedIndices,
+            totalSongDurationMs = mediaMetadata?.duration?.times(1000L),
+          )
+        }
+
         Row(
           horizontalArrangement = Arrangement.spacedBy(8.dp),
           verticalAlignment = Alignment.CenterVertically
@@ -2068,6 +2078,35 @@ fun Lyrics(
               modifier = Modifier.size(20.dp)
             )
           }
+
+          selectedSnippet?.let { snippet ->
+            val isDurationValid = snippet.isValidVideoDuration
+            val chipBg = if (isDurationValid) {
+              MaterialTheme.colorScheme.primaryContainer
+            } else {
+              MaterialTheme.colorScheme.surfaceVariant
+            }
+            val chipTextColor = if (isDurationValid) {
+              MaterialTheme.colorScheme.onPrimaryContainer
+            } else {
+              MaterialTheme.colorScheme.onSurfaceVariant
+            }
+
+            Box(
+              modifier = Modifier
+                .clip(RoundedCornerShape(12.dp))
+                .background(chipBg)
+                .padding(horizontal = 10.dp, vertical = 6.dp)
+            ) {
+              Text(
+                text = stringResource(R.string.video_duration_chip, snippet.durationSeconds),
+                color = chipTextColor,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold
+              )
+            }
+          }
+
           FilledTonalButton(
             onClick = {
               if (selectedIndices.isNotEmpty()) {
@@ -2076,6 +2115,25 @@ fun Lyrics(
                   sortedIndices.mapNotNull { lines.getOrNull(it)?.text }.joinToString("\n")
 
                 if (selectedLyricsText.isNotBlank()) {
+                  val snippet = selectedSnippet ?: echo.music.iad1tya.utils.LyricsVideoUtils.calculateSelectedSnippet(
+                    lines = lines,
+                    selectedIndices = sortedIndices,
+                    totalSongDurationMs = mediaMetadata?.duration?.times(1000L),
+                  )
+
+                  if (snippet != null) {
+                    videoSharePayload = echo.music.iad1tya.utils.LyricsSharePayload(
+                      text = selectedLyricsText,
+                      songTitle = mediaMetadata?.title ?: "",
+                      artists = mediaMetadata?.artists?.joinToString { it.name } ?: "",
+                      selectedEntries = snippet.selectedEntries,
+                      startTimeMs = snippet.startTimeMs,
+                      endTimeMs = snippet.endTimeMs,
+                      durationSeconds = snippet.durationSeconds,
+                      mediaMetadata = mediaMetadata,
+                    )
+                  }
+
                   shareDialogData =
                     Triple(
                       selectedLyricsText,
@@ -2176,6 +2234,57 @@ fun Lyrics(
               modifier = Modifier.fillMaxWidth()
             ) {
               Text(text = stringResource(R.string.share_as_image), fontSize = 16.sp)
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            val payload = videoSharePayload
+            val isValidVideo = isSynced && payload != null && payload.isValidVideoDuration
+
+            androidx.compose.material3.FilledTonalButton(
+              onClick = {
+                if (!isSynced) {
+                  Toast.makeText(
+                    context,
+                    context.getString(R.string.video_unsynced_warning),
+                    Toast.LENGTH_SHORT
+                  ).show()
+                } else if (payload == null || payload.isTooShort) {
+                  val cur = payload?.durationSeconds ?: 0f
+                  Toast.makeText(
+                    context,
+                    context.getString(R.string.video_duration_too_short, cur),
+                    Toast.LENGTH_SHORT
+                  ).show()
+                } else if (payload.isTooLong) {
+                  val cur = payload.durationSeconds
+                  Toast.makeText(
+                    context,
+                    context.getString(R.string.video_duration_too_long, cur),
+                    Toast.LENGTH_SHORT
+                  ).show()
+                } else {
+                  showShareDialog = false
+                  showVideoExportDialog = true
+                }
+              },
+              modifier = Modifier.fillMaxWidth()
+            ) {
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+              ) {
+                Text(text = stringResource(R.string.share_as_video), fontSize = 16.sp)
+                if (payload != null) {
+                  Text(
+                    text = String.format(java.util.Locale.US, "%.1fs", payload.durationSeconds),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = if (isValidVideo) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                  )
+                }
+              }
             }
 
             Row(
@@ -2563,6 +2672,15 @@ fun Lyrics(
           }
         }
       } // closes Dialog
+    }
+
+    if (showVideoExportDialog && videoSharePayload != null) {
+      LyricsVideoExportDialog(
+        payload = videoSharePayload!!,
+        onDismissRequest = {
+          showVideoExportDialog = false
+        }
+      )
     }
   }
 }

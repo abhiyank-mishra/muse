@@ -336,7 +336,7 @@ object ComposeToImage {
       return@withContext bitmap
     }
 
-  private fun fastBlur(sentBitmap: Bitmap, scale: Float, radius: Int): Bitmap? {
+  internal fun fastBlur(sentBitmap: Bitmap, scale: Float, radius: Int): Bitmap? {
     val width = (sentBitmap.width * scale).roundToInt()
     val height = (sentBitmap.height * scale).roundToInt()
 
