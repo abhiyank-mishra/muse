@@ -519,28 +519,41 @@ fun UpdateScreen(navController: NavHostController) {
 }
 
 fun triggerApkInstall(context: Context, file: File) {
-  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-    if (!context.packageManager.canRequestPackageInstalls()) {
-      val intent =
-        Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
-          .apply { data = Uri.parse("package:${context.packageName}") }
-      context.startActivity(intent)
-      return
+  try {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      val canInstall = try {
+        context.packageManager.canRequestPackageInstalls()
+      } catch (e: Exception) {
+        true
+      }
+      if (!canInstall) {
+        val intent =
+          Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
+            .apply {
+              data = Uri.parse("package:${context.packageName}")
+              addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        context.startActivity(intent)
+        return
+      }
     }
+    val uri =
+      FileProvider.getUriForFile(
+        context,
+        "${context.packageName}.FileProvider",
+        file
+      )
+    val installIntent =
+      Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(uri, "application/vnd.android.package-archive")
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      }
+    ContextCompat.startActivity(context, installIntent, null)
+  } catch (e: Exception) {
+    timber.log.Timber.e(e, "Error launching package installer")
+    android.widget.Toast.makeText(context, "Install error: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
   }
-  val uri =
-    FileProvider.getUriForFile(
-      context,
-      "${context.packageName}.FileProvider",
-      file
-    )
-  val installIntent =
-    Intent(Intent.ACTION_VIEW).apply {
-      setDataAndType(uri, "application/vnd.android.package-archive")
-      addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-      addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    }
-  ContextCompat.startActivity(context, installIntent, null)
 }
 
 fun startUpdateDownload(
