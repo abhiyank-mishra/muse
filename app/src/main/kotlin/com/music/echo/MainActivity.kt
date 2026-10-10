@@ -532,6 +532,7 @@ class MainActivity : ComponentActivity() {
     val enableDynamicTheme by rememberPreference(DynamicThemeKey, defaultValue = true)
     val enableHighRefreshRate by rememberPreference(EnableHighRefreshRateKey, defaultValue = true)
     val context = LocalContext.current
+    val navController = rememberNavController().also { this.navController = it }
     var showUpdateDialog by remember { androidx.compose.runtime.mutableStateOf(false) }
     var availableUpdateVersion by remember { androidx.compose.runtime.mutableStateOf("") }
     var availableUpdateChangelog by remember {
@@ -837,7 +838,11 @@ class MainActivity : ComponentActivity() {
               size = availableUpdateSize
             )
             android.widget.Toast.makeText(context, "Downloading update...", android.widget.Toast.LENGTH_SHORT).show()
-            navController.navigate("update")
+            try {
+              navController.navigate("update")
+            } catch (e: Exception) {
+              android.util.Log.e("Update", "Failed to navigate to update screen", e)
+            }
           }
         )
       } else {
@@ -904,7 +909,6 @@ class MainActivity : ComponentActivity() {
         val bottomInset = with(density) { windowsInsets.getBottom(density).toDp() }
         val bottomInsetDp = WindowInsets.systemBars.asPaddingValues().calculateBottomPadding()
 
-        val navController = rememberNavController()
         val blockedArtists by
           dataStore.data
             .map { it[BlockedArtistsKey] ?: emptySet() }
