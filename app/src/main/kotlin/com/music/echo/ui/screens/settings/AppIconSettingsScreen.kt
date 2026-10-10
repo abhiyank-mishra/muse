@@ -107,6 +107,8 @@ fun AppIconSettingsScreen(
   ) { innerPadding ->
     val icons =
       listOf(
+        AppIconOption(AppIconType.CRAFT, "Craft", "Craft icon by CR3TO_", R.mipmap.ic_launcher_craft),
+        AppIconOption(AppIconType.SADIE, "Sadie Sink", "Sadie Sink on community demand", R.mipmap.ic_launcher_sadie),
         AppIconOption(
           AppIconType.DEFAULT,
           "Muse Default",
