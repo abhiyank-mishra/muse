@@ -1,0 +1,23 @@
+{
+  "description": "Muse Music v1.0.5 brings real-time Muse Cloud Sync for Liked Songs and Custom Playlists, automatic web backup restoration, and Nothing OS 5.0 sync indicator.",
+  "changelog": [
+    {
+      "title": "Muse Cloud Sync & Web Backup",
+      "items": [
+        "Real-time bidirectional synchronization for Liked Songs between Muse Web and APK",
+        "Full Custom Playlist sync including playlist metadata and tracks",
+        "Automatic cloud backup reconciliation: existing web likes and playlists are automatically restored upon sign-in",
+        "Instant local and cloud updates with loop prevention and offline database persistence",
+        "Dedicated Nothing OS 5.0 Muse Cloud Sync status tile and manual 'Sync Now' action in Account Settings"
+      ]
+    },
+    {
+      "title": "Performance & Stability",
+      "items": [
+        "Optimized Firestore snapshot listeners with non-blocking Kotlin coroutines",
+        "Eliminated race conditions during playlist track reconciliation",
+        "Enhanced session persistence and token lifecycle handling across app launches"
+      ]
+    }
+  ]
+}
