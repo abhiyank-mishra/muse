@@ -174,6 +174,7 @@ not `java/` — despite what older internal docs may say).
 ```
 ai/             AI features (lyrics translation providers, etc.)
 api/            External API clients not covered by a dedicated module
+auth/           Firebase authentication & real-time cloud sync engine (MuseAuthManager, MuseSyncManager)
 constants/      Preference keys / constant definitions (DataStore keys live here)
 data/           Data layer glue
 db/
@@ -358,4 +359,21 @@ The Lyrics Video Export engine (`echo.music.iad1tya.utils` & `echo.music.iad1tya
 - **Kinetic Smooth Camera Scrolling Renderer:** `LyricsVideoFrameRenderer.kt` renders 1080p frames (9:16 Story or 1:1 Square). Pre-measures multiline text layouts with exact heights to completely prevent text overlapping. Includes smooth kinetic camera scrolling that centers active lines with cosine interpolation, living ambient background zoom, 4 dancing harmonic equalizer frequency bars in the header, real-time snippet progress bar, and official app logo watermark (`R.drawable.ic_launcher_nobg`) without emojis.
 - **Hardware-Accelerated Video Encoder:** `LyricsVideoEncoder.kt` uses Android native `MediaCodec` (H.264 / `video/avc`, 30 FPS, 5 Mbps) with an internal EGL 14 window surface, multiplexed with the trimmed AAC audio track via `MediaMuxer` without third-party native libraries or APK size bloat.
 - **In-Dialog Video Preview & Social Share Sheet:** `LyricsVideoExportDialog.kt` provides an embedded looping ExoPlayer video preview with play/pause touch overlays, and an ultra-modern circular action share strip with direct one-tap intents for Instagram Stories (`com.instagram.share.ADD_TO_STORY`), Instagram Direct (`com.instagram.android`), WhatsApp (`com.whatsapp` / `com.whatsapp.w4b`), Save to Gallery (`MediaStore`), and More Apps (`Intent.createChooser`).
+
+## Muse Cloud Sync (Web App & APK Bidirectional Synchronization)
+
+The Muse Cloud Sync engine (`echo.music.iad1tya.auth.MuseSyncManager`) provides two-way real-time synchronization and full cloud backup restoration between the Muse Web App (`F:\Projects\Next JS\Hosted\Player`) and this Android app (`F:\Projects\APK\Hosted\EMUSE`):
+- **Backend Infrastructure:** Shared Firebase project (`muse-155bb`) and Firestore security rules.
+- **Data Collections:**
+  - Liked Songs: `/users/{userId}/likes/{songId}` (stores track id, title/name, artist, album, duration, image, likedAt).
+  - Custom Playlists: `/users/{userId}/playlists/{playlistId}` (stores name, songs array with full metadata, is_active flag, createdAt).
+- **Inbound Real-Time Snapshot Listeners:** Subscribes to Firestore document changes (`DocumentChange.Type.ADDED`, `MODIFIED`, `REMOVED`) on both collections. Automatically restores cloud backup to Room DB upon user sign-in and updates local `SongEntity` (liked state) and `PlaylistEntity`/`PlaylistSongMap` on the fly.
+- **Outbound Instant Sync:**
+  - `syncSongLike` / `syncSongUnlike`: Triggered from `MusicService.toggleLike` and selection menus.
+  - `syncCreatePlaylist`: Triggered from `CreatePlaylistDialog`.
+  - `syncRenamePlaylist` & `syncDeletePlaylist`: Triggered from `PlaylistMenu` and `LocalPlaylistScreen`.
+  - `syncAddSongsToPlaylist` & `syncRemoveSongFromPlaylist`: Triggered from `AddToPlaylistDialog`, `LocalPlaylistScreen`, and `SongMenu`.
+- **Loop Prevention & SQLite FK Safety:** Guarded by `isApplyingRemoteUpdate` atomic flag. Guarantees `SongEntity` and `ArtistEntity`/`SongArtistMap` exist before inserting `PlaylistSongMap` to prevent foreign key constraint exceptions.
+- **UI & Settings:** `AccountSettingsScreen` renders a Nothing OS 5.0 Cloud Sync card with reactive sync status and a manual "Sync Now" button.
+
 

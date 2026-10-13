@@ -3,10 +3,18 @@ package echo.music.iad1tya.utils
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.BlurMaskFilter
 import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.ColorFilter
 import android.graphics.LinearGradient
+import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffColorFilter
+import android.graphics.PorterDuffXfermode
+import android.graphics.RadialGradient
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
@@ -20,6 +28,7 @@ import echo.music.iad1tya.lyrics.WordTimestamp
 import echo.music.iad1tya.ui.component.LyricsBackgroundStyle
 import kotlin.math.abs
 import kotlin.math.cos
+import kotlin.math.min
 import kotlin.math.sin
 
 enum class VideoAspectRatio(val width: Int, val height: Int) {
@@ -85,6 +94,28 @@ class LyricsVideoFrameRenderer(
     null
   }
 
+  // Extract accent color from cover art for active line highlight
+  private val accentColor: Int = if (coverArtBitmap != null) {
+    val palette = Palette.from(coverArtBitmap).generate()
+    palette.getVibrantColor(
+      palette.getLightVibrantColor(
+        palette.getMutedColor(0xFFBB86FC.toInt())
+      )
+    )
+  } else {
+    0xFFBB86FC.toInt()
+  }
+
+  // Pre-blurred cover art for lyrics area background ornament
+  private val blurredCoverForCard: Bitmap? = try {
+    coverArtBitmap?.let { bmp ->
+      val small = Bitmap.createScaledBitmap(bmp, 64, 64, true)
+      ComposeToImage.fastBlur(small, 1f, 25)
+    }
+  } catch (_: Exception) {
+    null
+  }
+
   // Layout metrics (normalized to 1080p canvas)
   private val scale = width / 1080f
   private val cardMarginHorizontal = 56f * scale
@@ -144,17 +175,17 @@ class LyricsVideoFrameRenderer(
     lyricsAvailableWidth = (cardRect.width() - (cardPadding * 2f)).coerceAtLeast(100f)
     lyricsRect = RectF(progressStartX, lyricsTopY, progressEndX, lyricsBottomY)
 
-    // Dynamic font sizing based on entry count & line length
+    // Dynamic font sizing based on entry count & line length — BIGGER text for cinematic feel
     val totalLines = selectedEntries.size.coerceAtLeast(1)
     baseLyricsFontSize = when {
-      totalLines <= 3 -> 36f * scale
-      totalLines <= 6 -> 30f * scale
-      totalLines <= 10 -> 26f * scale
-      totalLines <= 15 -> 22f * scale
-      else -> 19f * scale
+      totalLines <= 3 -> 48f * scale
+      totalLines <= 6 -> 40f * scale
+      totalLines <= 10 -> 34f * scale
+      totalLines <= 15 -> 28f * scale
+      else -> 24f * scale
     }
 
-    val entryGap = 32f * scale // Safe vertical margin between lines to completely prevent overlaps
+    val entryGap = 38f * scale // Generous vertical margin between lines
     var cumulativeY = 0f
     measuredLines.clear()
 
@@ -162,40 +193,41 @@ class LyricsVideoFrameRenderer(
       val entry = selectedEntries[i]
       val nextEntry = selectedEntries.getOrNull(i + 1)
       val startMs = entry.time
-      val endMs = nextEntry?.time ?: (startMs + 4000L).coerceAtMost(endTimeMs)
+      val endMs = nextEntry?.time ?: endTimeMs
 
-      // Inactive layout (35% alpha)
+      // Inactive layout (30% alpha, slightly dimmer for more contrast)
       val inactivePaint = TextPaint().apply {
         isAntiAlias = true
         color = mainTextColor
         textSize = baseLyricsFontSize
         typeface = Typeface.DEFAULT_BOLD
-        alpha = (255 * 0.35f).toInt()
-        letterSpacing = 0.005f
+        alpha = (255 * 0.30f).toInt()
+        letterSpacing = 0.01f
       }
       val inactiveLayout = StaticLayout.Builder.obtain(
         entry.text, 0, entry.text.length, inactivePaint, lyricsAvailableWidth.toInt()
       )
-        .setAlignment(Layout.Alignment.ALIGN_NORMAL)
-        .setLineSpacing(8f * scale, 1.15f)
+        .setAlignment(Layout.Alignment.ALIGN_CENTER)
+        .setLineSpacing(8f * scale, 1.18f)
         .setIncludePad(false)
         .build()
 
-      // Active layout (100% white, larger, glowing bloom)
+      // Active layout — larger with strong accent glow bloom
       val activePaint = TextPaint().apply {
         isAntiAlias = true
         color = 0xFFFFFFFF.toInt()
-        textSize = baseLyricsFontSize * 1.06f
+        textSize = baseLyricsFontSize * 1.15f
         typeface = Typeface.DEFAULT_BOLD
         alpha = 255
-        letterSpacing = 0.005f
-        setShadowLayer(22f * scale, 0f, 0f, 0x88FFFFFF.toInt())
+        letterSpacing = 0.01f
+        // Strong dual-layer glow: accent color bloom
+        setShadowLayer(28f * scale, 0f, 0f, accentColor and 0x00FFFFFF or 0xAA000000.toInt())
       }
       val activeLayout = StaticLayout.Builder.obtain(
         entry.text, 0, entry.text.length, activePaint, lyricsAvailableWidth.toInt()
       )
-        .setAlignment(Layout.Alignment.ALIGN_NORMAL)
-        .setLineSpacing(8f * scale, 1.15f)
+        .setAlignment(Layout.Alignment.ALIGN_CENTER)
+        .setLineSpacing(8f * scale, 1.18f)
         .setIncludePad(false)
         .build()
 
@@ -291,6 +323,71 @@ class LyricsVideoFrameRenderer(
       color = 0x24FFFFFF.toInt()
     }
     bgCanvas.drawRoundRect(cardRect, cardCornerRadius, cardCornerRadius, cardBorderPaint)
+
+    // 2b. Blurred Cover Art Ornament inside lyrics area (bottom-right, faded)
+    blurredCoverForCard?.let { blurArt ->
+      bgCanvas.save()
+      // Clip to card so art doesn't overflow
+      val clipPath = Path().apply {
+        addRoundRect(cardRect, cardCornerRadius, cardCornerRadius, Path.Direction.CW)
+      }
+      bgCanvas.clipPath(clipPath)
+
+      val ornamentSize = 280f * scale
+      val ornamentRect = RectF(
+        cardRect.right - ornamentSize - (20f * scale),
+        lyricsBottomY - ornamentSize + (40f * scale),
+        cardRect.right - (20f * scale),
+        lyricsBottomY + (40f * scale)
+      )
+      val ornamentPaint = Paint().apply {
+        isAntiAlias = true
+        alpha = 28 // Very subtle, ~11% opacity
+      }
+      bgCanvas.drawBitmap(blurArt, null, ornamentRect, ornamentPaint)
+
+      // Radial fade-out over the ornament so it blends seamlessly
+      val fadePaint = Paint().apply {
+        isAntiAlias = true
+        shader = RadialGradient(
+          ornamentRect.centerX(), ornamentRect.centerY(),
+          ornamentSize / 2f,
+          0x00000000, cardBaseColor,
+          Shader.TileMode.CLAMP
+        )
+      }
+      bgCanvas.drawRect(ornamentRect, fadePaint)
+      bgCanvas.restore()
+    }
+
+    // 2c. Frosted inner panel behind lyrics viewport (subtle layered glass)
+    val innerPanelRect = RectF(
+      lyricsRect.left - (8f * scale),
+      lyricsRect.top - (8f * scale),
+      lyricsRect.right + (8f * scale),
+      lyricsRect.bottom + (8f * scale)
+    )
+    val innerPanelRadius = 20f * scale
+    val innerPanelPaint = Paint().apply {
+      isAntiAlias = true
+      // Very subtle accent-tinted frosted glass
+      color = accentColor and 0x00FFFFFF or 0x0D000000 // ~5% accent tint
+    }
+    bgCanvas.save()
+    val innerClip = Path().apply {
+      addRoundRect(cardRect, cardCornerRadius, cardCornerRadius, Path.Direction.CW)
+    }
+    bgCanvas.clipPath(innerClip)
+    bgCanvas.drawRoundRect(innerPanelRect, innerPanelRadius, innerPanelRadius, innerPanelPaint)
+    // Subtle inner border
+    val innerBorderPaint = Paint().apply {
+      isAntiAlias = true
+      style = Paint.Style.STROKE
+      strokeWidth = 1f * scale
+      color = 0x12FFFFFF.toInt()
+    }
+    bgCanvas.drawRoundRect(innerPanelRect, innerPanelRadius, innerPanelRadius, innerBorderPaint)
+    bgCanvas.restore()
 
     // 3. Render Header (Cover Art + Title + Artist)
     val cardPadding = 36f * scale
@@ -394,8 +491,8 @@ class LyricsVideoFrameRenderer(
     val trackRect = RectF(progressStartX, progressY, progressEndX, progressY + barHeight)
     canvas.drawRoundRect(trackRect, barHeight / 2f, barHeight / 2f, barPaint)
 
-    // Filled Progress
-    barPaint.color = 0xFFFFFFFF.toInt()
+    // Filled Progress — accent color
+    barPaint.color = accentColor
     val filledWidth = barTotalWidth * progress01
     val fillRect = RectF(progressStartX, progressY, progressStartX + filledWidth, progressY + barHeight)
     canvas.drawRoundRect(fillRect, barHeight / 2f, barHeight / 2f, barPaint)
@@ -406,12 +503,15 @@ class LyricsVideoFrameRenderer(
     // 4. Calculate Active Line & Smooth Kinetic Scrolling Position
     if (measuredLines.isEmpty()) return frameBitmap
 
+    // 250ms vocal anticipation (matches player LyricsUtils.findCurrentLineIndex which uses +300ms)
+    val effectiveSongTimeMs = currentSongTimeMs + 250L
+
     var activeIndex = 0
     for (i in measuredLines.indices) {
-      if (currentSongTimeMs >= measuredLines[i].startMs && currentSongTimeMs < measuredLines[i].endMs) {
+      if (effectiveSongTimeMs >= measuredLines[i].startMs && effectiveSongTimeMs < measuredLines[i].endMs) {
         activeIndex = i
         break
-      } else if (currentSongTimeMs >= measuredLines[i].endMs) {
+      } else if (effectiveSongTimeMs >= measuredLines[i].endMs) {
         activeIndex = i
       }
     }
@@ -427,7 +527,7 @@ class LyricsVideoFrameRenderer(
 
       val smoothCenterY = if (nextLine != null) {
         val handoffWindowMs = 500L
-        val timeUntilNext = (currentLine.endMs - currentSongTimeMs).coerceAtLeast(0L)
+        val timeUntilNext = (currentLine.endMs - effectiveSongTimeMs).coerceAtLeast(0L)
         if (timeUntilNext < handoffWindowMs) {
           val progress = 1f - (timeUntilNext.toFloat() / handoffWindowMs)
           // Smooth cosine curve
@@ -464,6 +564,22 @@ class LyricsVideoFrameRenderer(
       canvas.translate(lyricsStartX, lineY)
 
       if (isActive && animateLyrics) {
+        // Draw accent glow pill behind active line
+        val glowPadH = 24f * scale
+        val glowPadV = 12f * scale
+        val glowRect = RectF(
+          -glowPadH, -glowPadV,
+          lyricsAvailableWidth + glowPadH,
+          line.activeHeight + glowPadV
+        )
+        val glowPaint = Paint().apply {
+          isAntiAlias = true
+          color = accentColor and 0x00FFFFFF or 0x1A000000 // ~10% accent
+          maskFilter = BlurMaskFilter(20f * scale, BlurMaskFilter.Blur.NORMAL)
+        }
+        canvas.drawRoundRect(glowRect, 18f * scale, 18f * scale, glowPaint)
+
+        // Draw the actual active text
         val words = line.entry.words
         if (words != null && words.isNotEmpty()) {
           renderWordKaraoke(canvas, line, currentSongTimeMs)
@@ -471,7 +587,17 @@ class LyricsVideoFrameRenderer(
           line.activeLayout.draw(canvas)
         }
       } else {
+        // Distance-based alpha fade for depth effect
+        val alphaMultiplier = when (distFromActive) {
+          1 -> 1.0f
+          2 -> 0.8f
+          3 -> 0.6f
+          else -> 0.45f
+        }
+        val savedAlpha = line.inactiveLayout.paint.alpha
+        line.inactiveLayout.paint.alpha = (savedAlpha * alphaMultiplier).toInt()
         line.inactiveLayout.draw(canvas)
+        line.inactiveLayout.paint.alpha = savedAlpha
       }
       canvas.restore()
     }

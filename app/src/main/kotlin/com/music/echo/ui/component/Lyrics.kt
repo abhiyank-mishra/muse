@@ -57,6 +57,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -558,7 +559,7 @@ fun Lyrics(
 
   var isSelectionModeActive by rememberSaveable { mutableStateOf(false) }
   val selectedIndices = remember { mutableStateListOf<Int>() }
-  var showMaxSelectionToast by remember { mutableStateOf(false) }
+  var selectedLyricsCount by remember { mutableIntStateOf(0) }
 
   val isLyricsProviderShown =
     lyricsEntity?.provider != null && lyricsEntity?.provider != "Unknown" && !isSelectionModeActive
@@ -569,20 +570,6 @@ fun Lyrics(
   BackHandler(enabled = isSelectionModeActive) {
     isSelectionModeActive = false
     selectedIndices.clear()
-  }
-
-  val maxSelectionLimit = 5
-
-  LaunchedEffect(showMaxSelectionToast) {
-    if (showMaxSelectionToast) {
-      Toast.makeText(
-          context,
-          context.getString(R.string.max_selection_limit, maxSelectionLimit),
-          Toast.LENGTH_SHORT
-        )
-        .show()
-      showMaxSelectionToast = false
-    }
   }
 
   val lifecycleOwner = LocalLifecycleOwner.current
@@ -943,8 +930,19 @@ fun Lyrics(
                       selectedIndices.remove(index)
                       if (selectedIndices.isEmpty()) isSelectionModeActive = false
                     } else {
-                      if (selectedIndices.size < maxSelectionLimit) selectedIndices.add(index)
-                      else showMaxSelectionToast = true
+                      if (selectedIndices.isNotEmpty()) {
+                        val minIdx = selectedIndices.minOrNull() ?: index
+                        val maxIdx = selectedIndices.maxOrNull() ?: index
+                        if (index < minIdx) {
+                          for (i in index..minIdx) { if (!selectedIndices.contains(i)) selectedIndices.add(i) }
+                        } else if (index > maxIdx) {
+                          for (i in maxIdx..index) { if (!selectedIndices.contains(i)) selectedIndices.add(i) }
+                        } else {
+                          selectedIndices.add(index)
+                        }
+                      } else {
+                        selectedIndices.add(index)
+                      }
                     }
                   } else if (isSynced && changeLyrics && !isGuest) {
                     val lyricsOffset = currentSong?.song?.lyricsOffset ?: 0
@@ -976,10 +974,8 @@ fun Lyrics(
                   if (!isSelectionModeActive) {
                     isSelectionModeActive = true
                     selectedIndices.add(index)
-                  } else if (!isSelected && selectedIndices.size < maxSelectionLimit) {
-                    selectedIndices.add(index)
                   } else if (!isSelected) {
-                    showMaxSelectionToast = true
+                    selectedIndices.add(index)
                   }
                 }
               )
@@ -1030,8 +1026,19 @@ fun Lyrics(
                       selectedIndices.remove(index)
                       if (selectedIndices.isEmpty()) isSelectionModeActive = false
                     } else {
-                      if (selectedIndices.size < maxSelectionLimit) selectedIndices.add(index)
-                      else showMaxSelectionToast = true
+                      if (selectedIndices.isNotEmpty()) {
+                        val minIdx = selectedIndices.minOrNull() ?: index
+                        val maxIdx = selectedIndices.maxOrNull() ?: index
+                        if (index < minIdx) {
+                          for (i in index..minIdx) { if (!selectedIndices.contains(i)) selectedIndices.add(i) }
+                        } else if (index > maxIdx) {
+                          for (i in maxIdx..index) { if (!selectedIndices.contains(i)) selectedIndices.add(i) }
+                        } else {
+                          selectedIndices.add(index)
+                        }
+                      } else {
+                        selectedIndices.add(index)
+                      }
                     }
                   } else if (isSynced && changeLyrics && !isGuest) {
                     val lyricsOffset = currentSong?.song?.lyricsOffset ?: 0
@@ -1063,10 +1070,8 @@ fun Lyrics(
                   if (!isSelectionModeActive) {
                     isSelectionModeActive = true
                     selectedIndices.add(index)
-                  } else if (!isSelected && selectedIndices.size < maxSelectionLimit) {
-                    selectedIndices.add(index)
                   } else if (!isSelected) {
-                    showMaxSelectionToast = true
+                    selectedIndices.add(index)
                   }
                 }
               )
@@ -1100,10 +1105,18 @@ fun Lyrics(
                           isSelectionModeActive = false
                         }
                       } else {
-                        if (selectedIndices.size < maxSelectionLimit) {
-                          selectedIndices.add(index)
+                        if (selectedIndices.isNotEmpty()) {
+                          val minIdx = selectedIndices.minOrNull() ?: index
+                          val maxIdx = selectedIndices.maxOrNull() ?: index
+                          if (index < minIdx) {
+                            for (i in index..minIdx) { if (!selectedIndices.contains(i)) selectedIndices.add(i) }
+                          } else if (index > maxIdx) {
+                            for (i in maxIdx..index) { if (!selectedIndices.contains(i)) selectedIndices.add(i) }
+                          } else {
+                            selectedIndices.add(index)
+                          }
                         } else {
-                          showMaxSelectionToast = true
+                          selectedIndices.add(index)
                         }
                       }
                     } else if (isSynced && changeLyrics && !isGuest) {
@@ -1142,12 +1155,8 @@ fun Lyrics(
                     if (!isSelectionModeActive) {
                       isSelectionModeActive = true
                       selectedIndices.add(index)
-                    } else if (!isSelected && selectedIndices.size < maxSelectionLimit) {
-
-                      selectedIndices.add(index)
                     } else if (!isSelected) {
-
-                      showMaxSelectionToast = true
+                      selectedIndices.add(index)
                     }
                   }
                 )
@@ -2134,6 +2143,7 @@ fun Lyrics(
                     )
                   }
 
+                  selectedLyricsCount = sortedIndices.size
                   shareDialogData =
                     Triple(
                       selectedLyricsText,
@@ -2225,15 +2235,46 @@ fun Lyrics(
 
             Spacer(modifier = Modifier.height(8.dp))
 
+            val isImageAllowed = selectedLyricsCount <= 5
+
             androidx.compose.material3.FilledTonalButton(
               onClick = {
-                shareDialogData = Triple(lyricsText, songTitle, artists)
-                showColorPickerDialog = true
-                showShareDialog = false
+                if (!isImageAllowed) {
+                  Toast.makeText(
+                    context,
+                    context.getString(R.string.image_max_selection_limit),
+                    Toast.LENGTH_SHORT
+                  ).show()
+                } else {
+                  shareDialogData = Triple(lyricsText, songTitle, artists)
+                  showColorPickerDialog = true
+                  showShareDialog = false
+                }
+              },
+              colors = if (!isImageAllowed) {
+                ButtonDefaults.filledTonalButtonColors(
+                  containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                  contentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                )
+              } else {
+                ButtonDefaults.filledTonalButtonColors()
               },
               modifier = Modifier.fillMaxWidth()
             ) {
-              Text(text = stringResource(R.string.share_as_image), fontSize = 16.sp)
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+              ) {
+                Text(text = stringResource(R.string.share_as_image), fontSize = 16.sp)
+                if (!isImageAllowed) {
+                  Text(
+                    text = stringResource(R.string.image_max_5_lines),
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                  )
+                }
+              }
             }
 
             Spacer(modifier = Modifier.height(8.dp))

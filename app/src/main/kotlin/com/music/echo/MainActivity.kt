@@ -24,6 +24,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.common.api.ApiException
 import echo.music.iad1tya.auth.MuseAuthManager
+import echo.music.iad1tya.auth.MuseSyncManager
 import echo.music.iad1tya.ui.component.MuseLoginDialog
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.CubicBezierEasing
@@ -509,6 +510,7 @@ class MainActivity : ComponentActivity() {
     }
 
     MuseAuthManager.init(this)
+    MuseSyncManager.init(this, database)
 
     setContent {
       echomusicApp(

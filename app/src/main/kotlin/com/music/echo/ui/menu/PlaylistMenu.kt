@@ -50,6 +50,7 @@ import echo.music.iad1tya.LocalDatabase
 import echo.music.iad1tya.LocalDownloadUtil
 import echo.music.iad1tya.LocalListenTogetherManager
 import echo.music.iad1tya.LocalPlayerConnection
+import echo.music.iad1tya.auth.MuseSyncManager
 import echo.music.iad1tya.R
 import echo.music.iad1tya.constants.EnableExportAsMp3Key
 import echo.music.iad1tya.constants.ExportDirectoryUriKey
@@ -211,6 +212,7 @@ fun PlaylistMenu(
         onDismiss()
         database.query {
           update(playlist.playlist.copy(name = name, lastUpdateTime = LocalDateTime.now()))
+          MuseSyncManager.syncRenamePlaylist(playlist.id, name)
         }
         coroutineScope.launch(Dispatchers.IO) {
           playlist.playlist.browseId?.let { YouTube.renamePlaylist(it, name) }
@@ -285,6 +287,7 @@ fun PlaylistMenu(
               }
 
               delete(playlist.playlist)
+              MuseSyncManager.syncDeletePlaylist(playlist.id)
             }
 
             coroutineScope.launch(Dispatchers.IO) {

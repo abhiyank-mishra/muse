@@ -61,6 +61,7 @@ import androidx.navigation.NavController
 import coil3.compose.AsyncImage
 import com.music.innertube.YouTube
 import echo.music.iad1tya.LocalDatabase
+import echo.music.iad1tya.auth.MuseSyncManager
 import echo.music.iad1tya.LocalDownloadUtil
 import echo.music.iad1tya.LocalListenTogetherManager
 import echo.music.iad1tya.LocalPlayerConnection
@@ -713,6 +714,7 @@ fun SongMenu(
                       }
                       move(playlistSong.map.playlistId, playlistSong.map.position, Int.MAX_VALUE)
                       delete(playlistSong.map.copy(position = Int.MAX_VALUE))
+                      MuseSyncManager.syncRemoveSongFromPlaylist(playlistSong.map.playlistId, playlistSong.map.songId)
                     }
                     onDismiss()
                   }

@@ -116,6 +116,7 @@ import com.music.innertube.models.SongItem
 import com.music.innertube.utils.completed
 import com.yalantis.ucrop.UCrop
 import echo.music.iad1tya.LocalDatabase
+import echo.music.iad1tya.auth.MuseSyncManager
 import echo.music.iad1tya.LocalDownloadUtil
 import echo.music.iad1tya.LocalPlayerAwareWindowInsets
 import echo.music.iad1tya.LocalPlayerConnection
@@ -337,6 +338,7 @@ fun LocalPlaylistScreen(
         onDone = { name ->
           database.query {
             update(playlistEntity.copy(name = name, lastUpdateTime = LocalDateTime.now()))
+            MuseSyncManager.syncRenamePlaylist(playlistEntity.id, name)
           }
           viewModel.viewModelScope.launch(Dispatchers.IO) {
             playlistEntity.browseId?.let { YouTube.renamePlaylist(it, name) }
@@ -406,7 +408,12 @@ fun LocalPlaylistScreen(
         TextButton(
           onClick = {
             showDeletePlaylistDialog = false
-            database.query { playlist?.let { delete(it.playlist) } }
+            database.query {
+              playlist?.let {
+                delete(it.playlist)
+                MuseSyncManager.syncDeletePlaylist(it.id)
+              }
+            }
             viewModel.viewModelScope.launch(Dispatchers.IO) {
               playlist?.playlist?.browseId?.let { YouTube.deletePlaylist(it) }
             }
@@ -577,6 +584,9 @@ fun LocalPlaylistScreen(
               }
               move(currentItem.map.playlistId, currentItem.map.position, Int.MAX_VALUE)
               delete(currentItem.map.copy(position = Int.MAX_VALUE))
+              playlist?.let {
+                MuseSyncManager.syncRemoveSongFromPlaylist(it.id, currentItem.map.songId)
+              }
             }
           }
 

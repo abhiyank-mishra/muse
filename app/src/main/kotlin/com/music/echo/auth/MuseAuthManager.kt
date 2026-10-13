@@ -76,6 +76,7 @@ object MuseAuthManager {
 
     auth.currentUser?.let { user ->
       listenToUserDoc(user.uid)
+      MuseSyncManager.start(user.uid)
     }
 
     auth.addAuthStateListener { firebaseAuth ->
@@ -88,6 +89,7 @@ object MuseAuthManager {
         syncUserProfile(user)
         syncFcmToken(user.uid)
         listenToUserDoc(user.uid)
+        MuseSyncManager.start(user.uid)
       } else {
         userDocListener?.remove()
         userDocListener = null
@@ -99,6 +101,7 @@ object MuseAuthManager {
         if (currentPlays >= GUEST_PLAY_LIMIT) {
           _isGuestLimitReached.value = true
         }
+        MuseSyncManager.stop()
       }
     }
   }
@@ -204,6 +207,7 @@ object MuseAuthManager {
   }
 
   fun signOut(context: Context, onComplete: () -> Unit = {}) {
+    MuseSyncManager.stop()
     userDocListener?.remove()
     userDocListener = null
     _customUsername.value = null

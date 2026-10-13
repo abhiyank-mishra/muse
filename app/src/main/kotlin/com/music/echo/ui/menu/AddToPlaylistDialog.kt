@@ -42,6 +42,7 @@ import echo.music.iad1tya.constants.AddToPlaylistSortTypeKey
 import echo.music.iad1tya.constants.InnerTubeCookieKey
 import echo.music.iad1tya.constants.ListThumbnailSize
 import echo.music.iad1tya.constants.PlaylistSortType
+import echo.music.iad1tya.auth.MuseSyncManager
 import echo.music.iad1tya.db.entities.Playlist
 import echo.music.iad1tya.ui.component.CreatePlaylistDialog
 import echo.music.iad1tya.ui.component.DefaultDialog
@@ -213,6 +214,7 @@ fun AddToPlaylistDialog(
                 } else {
                   onDismiss()
                   database.addSongToPlaylist(playlist, songIds!!)
+                  MuseSyncManager.syncAddSongsToPlaylist(playlist.id, songIds!!)
 
                   playlist.playlist.browseId?.let { plist ->
                     songIds?.forEach { YouTube.addToPlaylist(plist, it) }

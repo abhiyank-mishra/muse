@@ -197,6 +197,36 @@ object LyricsAudioTrimmer {
       val encoderBufferInfo = MediaCodec.BufferInfo()
 
       try {
+        fun drainEncoderOutput(): Boolean {
+          val encOutIndex = encoder.dequeueOutputBuffer(encoderBufferInfo, TIMEOUT_US)
+          if (encOutIndex >= 0) {
+            val encodedData = encoder.getOutputBuffer(encOutIndex)!!
+            if ((encoderBufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0) {
+              encoderBufferInfo.size = 0
+            }
+
+            if (encoderBufferInfo.size > 0 && muxerStarted) {
+              encodedData.position(encoderBufferInfo.offset)
+              encodedData.limit(encoderBufferInfo.offset + encoderBufferInfo.size)
+              muxer.writeSampleData(muxerAudioTrack, encodedData, encoderBufferInfo)
+            }
+
+            encoder.releaseOutputBuffer(encOutIndex, false)
+
+            if ((encoderBufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
+              encoderDone = true
+            }
+            return true
+          } else if (encOutIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+            val newFormat = encoder.outputFormat
+            muxerAudioTrack = muxer.addTrack(newFormat)
+            muxer.start()
+            muxerStarted = true
+            return true
+          }
+          return false
+        }
+
         while (!encoderDone) {
           // 1. Feed Extractor to Decoder
           if (!extractorDone) {
@@ -226,13 +256,25 @@ object LyricsAudioTrimmer {
 
               if (isEos || pts >= endUs) {
                 // Signal EOS to encoder
-                val encInIndex = encoder.dequeueInputBuffer(TIMEOUT_US)
+                var encInIndex = encoder.dequeueInputBuffer(TIMEOUT_US)
+                var tries = 0
+                while (encInIndex < 0 && tries < 20) {
+                  drainEncoderOutput()
+                  encInIndex = encoder.dequeueInputBuffer(TIMEOUT_US)
+                  tries++
+                }
                 if (encInIndex >= 0) {
                   encoder.queueInputBuffer(encInIndex, 0, 0, (endUs - startUs).coerceAtLeast(0L), MediaCodec.BUFFER_FLAG_END_OF_STREAM)
                   decoderDone = true
                 }
               } else if (pcmBuffer != null && decoderBufferInfo.size > 0 && pts >= startUs) {
-                val encInIndex = encoder.dequeueInputBuffer(TIMEOUT_US)
+                var encInIndex = encoder.dequeueInputBuffer(TIMEOUT_US)
+                var tries = 0
+                while (encInIndex < 0 && tries < 20) {
+                  drainEncoderOutput()
+                  encInIndex = encoder.dequeueInputBuffer(TIMEOUT_US)
+                  tries++
+                }
                 if (encInIndex >= 0) {
                   val encBuffer = encoder.getInputBuffer(encInIndex)!!
                   encBuffer.clear()
@@ -266,30 +308,7 @@ object LyricsAudioTrimmer {
           }
 
           // 3. Read Encoded AAC & Write to Muxer
-          val encOutIndex = encoder.dequeueOutputBuffer(encoderBufferInfo, TIMEOUT_US)
-          if (encOutIndex >= 0) {
-            val encodedData = encoder.getOutputBuffer(encOutIndex)!!
-            if ((encoderBufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0) {
-              encoderBufferInfo.size = 0
-            }
-
-            if (encoderBufferInfo.size > 0 && muxerStarted) {
-              encodedData.position(encoderBufferInfo.offset)
-              encodedData.limit(encoderBufferInfo.offset + encoderBufferInfo.size)
-              muxer.writeSampleData(muxerAudioTrack, encodedData, encoderBufferInfo)
-            }
-
-            encoder.releaseOutputBuffer(encOutIndex, false)
-
-            if ((encoderBufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
-              encoderDone = true
-            }
-          } else if (encOutIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-            val newFormat = encoder.outputFormat
-            muxerAudioTrack = muxer.addTrack(newFormat)
-            muxer.start()
-            muxerStarted = true
-          }
+          drainEncoderOutput()
         }
       } finally {
         try { decoder.stop() } catch (_: Exception) {}

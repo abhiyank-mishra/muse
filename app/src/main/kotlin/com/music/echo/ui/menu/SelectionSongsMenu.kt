@@ -44,6 +44,7 @@ import echo.music.iad1tya.LocalDownloadUtil
 import echo.music.iad1tya.LocalPlayerConnection
 import echo.music.iad1tya.LocalSyncUtils
 import echo.music.iad1tya.R
+import echo.music.iad1tya.auth.MuseSyncManager
 import echo.music.iad1tya.db.entities.PlaylistSongMap
 import echo.music.iad1tya.db.entities.Song
 import echo.music.iad1tya.extensions.toMediaItem
@@ -448,6 +449,11 @@ fun SelectionSongMenu(
                         val s = song.song.toggleLike()
                         update(s)
                         syncUtils.likeSong(s)
+                        if (s.liked) {
+                          MuseSyncManager.syncSongLike(s)
+                        } else {
+                          MuseSyncManager.syncSongUnlike(s.id)
+                        }
                       }
                     }
                   }
@@ -736,11 +742,19 @@ fun SelectionMediaMetadataMenu(
                 onClick = {
                   database.query {
                     if (allLiked) {
-                      songSelection.forEach { song -> update(song.toSongEntity().toggleLike()) }
+                      songSelection.forEach { song ->
+                        val toggled = song.toSongEntity().toggleLike()
+                        update(toggled)
+                        MuseSyncManager.syncSongUnlike(toggled.id)
+                      }
                     } else {
                       songSelection
                         .filter { !it.liked }
-                        .forEach { song -> update(song.toSongEntity().toggleLike()) }
+                        .forEach { song ->
+                          val toggled = song.toSongEntity().toggleLike()
+                          update(toggled)
+                          MuseSyncManager.syncSongLike(toggled)
+                        }
                     }
                   }
                 }

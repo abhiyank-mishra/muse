@@ -68,12 +68,15 @@ object LyricsVideoUtils {
     if (selectedIndices.isEmpty() || lines.isEmpty()) return null
 
     val sortedIndices = selectedIndices.sorted()
-    val selectedEntries = sortedIndices.mapNotNull { lines.getOrNull(it) }
-    if (selectedEntries.isEmpty()) return null
-
     val firstIndex = sortedIndices.first()
     val lastIndex = sortedIndices.last()
     val startTimeMs = lines.getOrNull(firstIndex)?.time ?: 0L
+
+    // For video sync, all lyrics in the audio playback window (firstIndex..lastIndex)
+    // MUST be present so the singer's vocal never diverges from displayed lines.
+    val contiguousIndices = (firstIndex..lastIndex).toList()
+    val selectedEntries = contiguousIndices.mapNotNull { lines.getOrNull(it) }
+    if (selectedEntries.isEmpty()) return null
 
     val lastEntry = lines.getOrNull(lastIndex)
     val words = lastEntry?.words

@@ -39,6 +39,7 @@ import com.music.innertube.utils.parseCookieString
 import echo.music.iad1tya.LocalPlayerAwareWindowInsets
 import echo.music.iad1tya.R
 import echo.music.iad1tya.auth.MuseAuthManager
+import echo.music.iad1tya.auth.MuseSyncManager
 import echo.music.iad1tya.constants.*
 import echo.music.iad1tya.constants.SavedAccountsKey
 import echo.music.iad1tya.models.AccountData
@@ -114,6 +115,7 @@ fun AccountSettingsScreen(
       var showEditUsernameDialog by remember { mutableStateOf(false) }
       var editUsernameText by remember { mutableStateOf("") }
       var isUpdatingUsername by remember { mutableStateOf(false) }
+      val syncStatus by MuseSyncManager.syncStatus.collectAsState()
 
       val museDisplayName = customUsername
         ?: museUser?.displayName?.takeIf { it.isNotBlank() }
@@ -188,6 +190,36 @@ fun AccountSettingsScreen(
               onClick = {
                 editUsernameText = museDisplayName
                 showEditUsernameDialog = true
+              }
+            ),
+            Material3SettingsItem(
+              icon = painterResource(R.drawable.sync),
+              title = { Text("Muse Cloud Sync") },
+              description = {
+                val statusText = when (syncStatus) {
+                  is MuseSyncManager.SyncStatus.Syncing -> "Syncing with Muse Web..."
+                  is MuseSyncManager.SyncStatus.Completed -> "Synced with Muse Web"
+                  is MuseSyncManager.SyncStatus.Error -> "Sync error: ${(syncStatus as MuseSyncManager.SyncStatus.Error).message}"
+                  else -> "Liked songs & playlists synced"
+                }
+                Text(statusText)
+              },
+              trailingContent = {
+                FilledTonalButton(
+                  onClick = { MuseSyncManager.forceSyncNow() },
+                  enabled = syncStatus !is MuseSyncManager.SyncStatus.Syncing,
+                  contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                ) {
+                  Text(
+                    text = if (syncStatus is MuseSyncManager.SyncStatus.Syncing) "Syncing" else "Sync Now",
+                    style = MaterialTheme.typography.labelMedium
+                  )
+                }
+              },
+              onClick = {
+                if (syncStatus !is MuseSyncManager.SyncStatus.Syncing) {
+                  MuseSyncManager.forceSyncNow()
+                }
               }
             ),
             Material3SettingsItem(

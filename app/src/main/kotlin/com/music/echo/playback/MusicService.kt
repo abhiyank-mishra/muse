@@ -87,6 +87,7 @@ import echo.music.iad1tya.constants.DiscordTokenKey
 import echo.music.iad1tya.constants.EnableBitPerfectUsbDacKey
 import echo.music.iad1tya.constants.EnableDiscordRPCKey
 import echo.music.iad1tya.constants.EnableLastFMScrobblingKey
+import echo.music.iad1tya.auth.MuseSyncManager
 import echo.music.iad1tya.constants.ForceOpusKey
 import echo.music.iad1tya.constants.HideExplicitKey
 import echo.music.iad1tya.constants.HideVideoSongsKey
@@ -2262,6 +2263,11 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
         database.query {
           update(song)
           syncUtils.likeSong(song)
+          if (song.liked) {
+            MuseSyncManager.syncSongLike(song)
+          } else {
+            MuseSyncManager.syncSongUnlike(song.id)
+          }
 
           if (dataStore.get(AutoDownloadOnLikeKey, false) && song.liked) {
 

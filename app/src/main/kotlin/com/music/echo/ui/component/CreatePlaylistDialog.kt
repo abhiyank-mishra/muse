@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import com.music.innertube.YouTube
 import echo.music.iad1tya.LocalDatabase
 import echo.music.iad1tya.R
+import echo.music.iad1tya.auth.MuseSyncManager
 import echo.music.iad1tya.constants.InnerTubeCookieKey
 import echo.music.iad1tya.db.entities.PlaylistEntity
 import echo.music.iad1tya.extensions.isSyncEnabled
@@ -74,6 +75,7 @@ fun CreatePlaylistDialog(
           )
 
         database.query { insert(playlistEntity) }
+        MuseSyncManager.syncCreatePlaylist(playlistEntity)
 
         withContext(Dispatchers.Main) { onPlaylistCreated?.invoke(playlistEntity.id) }
       }

@@ -4,7 +4,8 @@
     "Local Taste Engine (Slice 2): Multi-source Last.fm recommendation pipeline (similar tracks, similar artists, top genres) with 1-hour taste snapshot caching and additive scoring bonuses",
     "Local Taste Engine (Slice 3): Genre awareness with additive scoring bonus (+1.0), YouTube taste signals extraction, cross-screen generation status synchronization, and 'From Taste' quick action",
     "Share Lyrics as Video: Export selected lyrics (10s-60s / 1 min) as a high-quality video with trimmed audio, hardware-accelerated MediaCodec encoding, and real-time synchronized karaoke animation",
-    "Lyrics Video Export Enhancements: Kinetic smooth camera scrolling, dynamic ambient motion, equalizer frequency visualizer, real-time progress bar, and embedded video preview with direct Instagram Story, Instagram Direct, and WhatsApp sharing"
+    "Lyrics Video Export Enhancements: Kinetic smooth camera scrolling, dynamic ambient motion, equalizer frequency visualizer, real-time progress bar, and embedded video preview with direct Instagram Story, Instagram Direct, and WhatsApp sharing",
+    "Muse Cloud Sync: Real-time bidirectional synchronization and full backup restoration for liked songs and custom playlists between Muse Web App and Android APK"
   ],
   "bug_fixes": [
     "Fixed YouTube audio stream download throttling during lyrics snippet trimming",
