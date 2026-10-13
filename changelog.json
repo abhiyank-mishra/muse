@@ -1,22 +1,22 @@
 {
-  "description": "Muse Music v1.0.5 brings real-time Muse Cloud Sync for Liked Songs and Custom Playlists, automatic web backup restoration, and Nothing OS 5.0 sync indicator.",
+  "description": "Muse Music v1.0.6 introduces native YouTube Music track resolution for cloud sync, eliminating JioSaavn playback failures and ensuring instant, seamless audio streaming for all synced tracks.",
   "changelog": [
     {
-      "title": "Muse Cloud Sync & Web Backup",
+      "title": "Native YouTube Music Track Resolution",
       "items": [
-        "Real-time bidirectional synchronization for Liked Songs between Muse Web and APK",
-        "Full Custom Playlist sync including playlist metadata and tracks",
-        "Automatic cloud backup reconciliation: existing web likes and playlists are automatically restored upon sign-in",
-        "Instant local and cloud updates with loop prevention and offline database persistence",
-        "Dedicated Nothing OS 5.0 Muse Cloud Sync status tile and manual 'Sync Now' action in Account Settings"
+        "Eliminated JioSaavn playback failures: all cloud-synced tracks are resolved directly to 11-char YouTube Video IDs",
+        "Automatic background track resolution using YouTube Music search pipeline with verified titles and audio streams",
+        "Dual cloud backfill: resolved YouTube IDs are synced back to Firestore for instant future synchronization",
+        "Integrated rate-limit protection and in-memory LRU cache for lightning-fast playlist reconciliation",
+        "Live resolving status counter in Account Settings ('Resolving with YouTube X/Y...')"
       ]
     },
     {
-      "title": "Performance & Stability",
+      "title": "Cloud Sync & Playback Improvements",
       "items": [
-        "Optimized Firestore snapshot listeners with non-blocking Kotlin coroutines",
-        "Eliminated race conditions during playlist track reconciliation",
-        "Enhanced session persistence and token lifecycle handling across app launches"
+        "Unlinking and playlist item deletions now accurately match both document IDs and YouTube video IDs",
+        "Guaranteed instant playback on ExoPlayer for all liked songs and custom playlist imports",
+        "Enhanced Nothing OS 5.0 sync indicator card with reactive busy states and retry handling"
       ]
     }
   ]
