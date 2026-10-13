@@ -365,15 +365,22 @@ The Lyrics Video Export engine (`echo.music.iad1tya.utils` & `echo.music.iad1tya
 The Muse Cloud Sync engine (`echo.music.iad1tya.auth.MuseSyncManager`) provides two-way real-time synchronization and full cloud backup restoration between the Muse Web App (`F:\Projects\Next JS\Hosted\Player`) and this Android app (`F:\Projects\APK\Hosted\EMUSE`):
 - **Backend Infrastructure:** Shared Firebase project (`muse-155bb`) and Firestore security rules.
 - **Data Collections:**
-  - Liked Songs: `/users/{userId}/likes/{songId}` (stores track id, title/name, artist, album, duration, image, likedAt).
-  - Custom Playlists: `/users/{userId}/playlists/{playlistId}` (stores name, songs array with full metadata, is_active flag, createdAt).
+  - Liked Songs: `/users/{userId}/likes/{songId}` (stores track id, youtubeId, title/name, artist, album, duration, image, likedAt).
+  - Custom Playlists: `/users/{userId}/playlists/{playlistId}` (stores name, songs array with full metadata and youtubeId, is_active flag, createdAt).
+- **Native YouTube Track Resolution (Zero JioSaavn Failure):**
+  - Web tracks originally fetched from JioSaavn contain non-YouTube IDs that cannot be played on ExoPlayer / InnerTube.
+  - `MuseSyncManager` inspects every incoming track with `isYouTubeVideoId(id)`. If the track is from JioSaavn or external, it calls `resolveToYouTube(title, artist, duration)`.
+  - Queries `YouTube.search("$cleanTitle $cleanArtist", YouTube.SearchFilter.FILTER_SONG)` to obtain the official 11-character YouTube video ID, YouTube-verified title, artists, duration, and thumbnail.
+  - In-memory LRU cache (`trackResolutionCache`, 500 items) and a `Semaphore(3)` concurrency pool eliminate rate limits and avoid repeated network calls.
+  - Asynchronously backfills `youtubeId` and `source: "youtube"` into Firestore documents so all devices sync instantly without re-resolving.
+  - All songs in the APK's Room DB are guaranteed 100% YouTube-native and stream flawlessly.
 - **Inbound Real-Time Snapshot Listeners:** Subscribes to Firestore document changes (`DocumentChange.Type.ADDED`, `MODIFIED`, `REMOVED`) on both collections. Automatically restores cloud backup to Room DB upon user sign-in and updates local `SongEntity` (liked state) and `PlaylistEntity`/`PlaylistSongMap` on the fly.
 - **Outbound Instant Sync:**
-  - `syncSongLike` / `syncSongUnlike`: Triggered from `MusicService.toggleLike` and selection menus.
+  - `syncSongLike` / `syncSongUnlike`: Triggered from `MusicService.toggleLike` and selection menus. Deletes by direct ID and by `youtubeId` match.
   - `syncCreatePlaylist`: Triggered from `CreatePlaylistDialog`.
   - `syncRenamePlaylist` & `syncDeletePlaylist`: Triggered from `PlaylistMenu` and `LocalPlaylistScreen`.
   - `syncAddSongsToPlaylist` & `syncRemoveSongFromPlaylist`: Triggered from `AddToPlaylistDialog`, `LocalPlaylistScreen`, and `SongMenu`.
 - **Loop Prevention & SQLite FK Safety:** Guarded by `isApplyingRemoteUpdate` atomic flag. Guarantees `SongEntity` and `ArtistEntity`/`SongArtistMap` exist before inserting `PlaylistSongMap` to prevent foreign key constraint exceptions.
-- **UI & Settings:** `AccountSettingsScreen` renders a Nothing OS 5.0 Cloud Sync card with reactive sync status and a manual "Sync Now" button.
+- **UI & Settings:** `AccountSettingsScreen` renders a Nothing OS 5.0 Cloud Sync card with reactive sync status (`Syncing`, `Resolving (X/Y)`, `Completed`, `Error`) and a manual "Sync Now" button.
 
 

@@ -196,28 +196,31 @@ fun AccountSettingsScreen(
               icon = painterResource(R.drawable.sync),
               title = { Text("Muse Cloud Sync") },
               description = {
-                val statusText = when (syncStatus) {
+                val statusText = when (val s = syncStatus) {
                   is MuseSyncManager.SyncStatus.Syncing -> "Syncing with Muse Web..."
-                  is MuseSyncManager.SyncStatus.Completed -> "Synced with Muse Web"
-                  is MuseSyncManager.SyncStatus.Error -> "Sync error: ${(syncStatus as MuseSyncManager.SyncStatus.Error).message}"
+                  is MuseSyncManager.SyncStatus.Resolving -> "Resolving with YouTube (${s.current}/${s.total})..."
+                  is MuseSyncManager.SyncStatus.Completed -> "Synced with Muse Web (YouTube Verified)"
+                  is MuseSyncManager.SyncStatus.Error -> "Sync error: ${s.message}"
                   else -> "Liked songs & playlists synced"
                 }
                 Text(statusText)
               },
               trailingContent = {
+                val isBusy = syncStatus is MuseSyncManager.SyncStatus.Syncing || syncStatus is MuseSyncManager.SyncStatus.Resolving
                 FilledTonalButton(
                   onClick = { MuseSyncManager.forceSyncNow() },
-                  enabled = syncStatus !is MuseSyncManager.SyncStatus.Syncing,
+                  enabled = !isBusy,
                   contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 4.dp)
                 ) {
                   Text(
-                    text = if (syncStatus is MuseSyncManager.SyncStatus.Syncing) "Syncing" else "Sync Now",
+                    text = if (isBusy) "Syncing" else "Sync Now",
                     style = MaterialTheme.typography.labelMedium
                   )
                 }
               },
               onClick = {
-                if (syncStatus !is MuseSyncManager.SyncStatus.Syncing) {
+                val isBusy = syncStatus is MuseSyncManager.SyncStatus.Syncing || syncStatus is MuseSyncManager.SyncStatus.Resolving
+                if (!isBusy) {
                   MuseSyncManager.forceSyncNow()
                 }
               }

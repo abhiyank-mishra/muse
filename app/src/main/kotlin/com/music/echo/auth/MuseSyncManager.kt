@@ -8,6 +8,8 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.SetOptions
+import com.music.innertube.YouTube
+import com.music.innertube.models.SongItem
 import echo.music.iad1tya.db.MusicDatabase
 import echo.music.iad1tya.db.entities.ArtistEntity
 import echo.music.iad1tya.db.entities.PlaylistEntity
@@ -22,6 +24,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.tasks.await
 import timber.log.Timber
 import java.time.LocalDateTime
@@ -34,6 +38,7 @@ object MuseSyncManager {
   sealed class SyncStatus {
     data object Idle : SyncStatus()
     data object Syncing : SyncStatus()
+    data class Resolving(val current: Int, val total: Int) : SyncStatus()
     data class Completed(val timestamp: Long) : SyncStatus()
     data class Error(val message: String) : SyncStatus()
   }
@@ -57,6 +62,12 @@ object MuseSyncManager {
   // Guard flag to avoid re-triggering remote uploads when applying changes from remote
   private val isApplyingRemoteUpdate = AtomicBoolean(false)
   private var activeUserId: String? = null
+
+  // LRU cache for resolved YouTube songs to minimize network lookups
+  private val trackResolutionCache = object : LinkedHashMap<String, SongItem>(500, 0.75f, true) {
+    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, SongItem>?): Boolean = size > 500
+  }
+  private val resolutionSemaphore = Semaphore(3)
 
   fun init(context: Context, db: MusicDatabase) {
     appContext = context.applicationContext
@@ -100,6 +111,67 @@ object MuseSyncManager {
   }
 
   /* -------------------------------------------------------------
+   * YouTube Track Resolution Helpers
+   * ------------------------------------------------------------- */
+
+  fun isYouTubeVideoId(id: String): Boolean {
+    return id.length == 11 && id.matches(Regex("^[a-zA-Z0-9_-]{11}$"))
+  }
+
+  private fun sanitizeTitle(title: String): String {
+    return title
+      .replace(Regex("\\(From \"[^\"]+\"\\)", RegexOption.IGNORE_CASE), "")
+      .replace(Regex("\\(Original Motion Picture Track\\)", RegexOption.IGNORE_CASE), "")
+      .replace(Regex("\\[Official Video\\]|\\[Audio\\]|\\(Official Audio\\)", RegexOption.IGNORE_CASE), "")
+      .replace(Regex("\\(feat\\.[^)]+\\)", RegexOption.IGNORE_CASE), "")
+      .trim()
+  }
+
+  suspend fun resolveToYouTube(title: String, artist: String, originalDuration: Int = -1): SongItem? {
+    val cleanTitle = sanitizeTitle(title)
+    val cleanArtist = if (artist.isBlank() || artist.equals("Unknown Artist", ignoreCase = true)) "" else artist
+    val cacheKey = "$cleanTitle||$cleanArtist"
+
+    synchronized(trackResolutionCache) {
+      trackResolutionCache[cacheKey]?.let { return it }
+    }
+
+    return try {
+      resolutionSemaphore.withPermit {
+        synchronized(trackResolutionCache) {
+          trackResolutionCache[cacheKey]?.let { return@withPermit it }
+        }
+
+        val query = "$cleanTitle $cleanArtist".trim()
+        val searchResult = YouTube.search(
+          query,
+          YouTube.SearchFilter.FILTER_SONG
+        ).getOrNull()
+
+        val songItems = searchResult?.items?.filterIsInstance<SongItem>().orEmpty()
+        val bestMatch = if (originalDuration > 0 && songItems.size > 1) {
+          songItems.minByOrNull { item ->
+            val d = item.duration ?: 0
+            if (d > 0) Math.abs(d - originalDuration) else 9999
+          } ?: songItems.firstOrNull()
+        } else {
+          songItems.firstOrNull()
+        }
+
+        if (bestMatch != null) {
+          synchronized(trackResolutionCache) {
+            trackResolutionCache[cacheKey] = bestMatch
+          }
+        }
+        bestMatch
+      }
+    } catch (e: Exception) {
+      Timber.tag(TAG).e(e, "Error resolving track to YouTube: $title by $artist")
+      null
+    }
+  }
+
+  /* -------------------------------------------------------------
    * Remote Snapshot Listeners
    * ------------------------------------------------------------- */
 
@@ -126,16 +198,19 @@ object MuseSyncManager {
     try {
       for (change in changes) {
         val doc = change.document
-        val songId = doc.id
         when (change.type) {
           DocumentChange.Type.ADDED, DocumentChange.Type.MODIFIED -> {
             applyRemoteSongLike(doc)
           }
           DocumentChange.Type.REMOVED -> {
-            val existing = db.getSongByIdBlocking(songId)
+            val rawId = doc.id
+            val youtubeId = doc.getString("youtubeId")
+            val targetSongId = youtubeId ?: rawId
+            val existing = db.getSongByIdBlocking(targetSongId)
+              ?: if (youtubeId != null) db.getSongByIdBlocking(rawId) else null
             if (existing != null && existing.song.liked) {
-              db.updateLikedStatus(songId, false, null)
-              Timber.tag(TAG).d("Unliked song locally from remote change: $songId")
+              db.updateLikedStatus(existing.song.id, false, null)
+              Timber.tag(TAG).d("Unliked song locally from remote change: ${existing.song.id}")
             }
           }
         }
@@ -147,9 +222,9 @@ object MuseSyncManager {
     }
   }
 
-  private fun applyRemoteSongLike(doc: DocumentSnapshot) {
-    val db = database ?: return
-    val songId = doc.getString("id") ?: doc.id
+  private suspend fun applyRemoteSongLike(doc: DocumentSnapshot) {
+    val rawId = doc.getString("id") ?: doc.id
+    val youtubeId = doc.getString("youtubeId")
     val title = doc.getString("name") ?: doc.getString("title") ?: "Unknown Song"
     val artist = doc.getString("artist") ?: "Unknown Artist"
     val album = doc.getString("album")
@@ -159,17 +234,66 @@ object MuseSyncManager {
     val likedAt = doc.getTimestamp("likedAt")?.toDate()?.toInstant()
       ?.atZone(ZoneId.systemDefault())?.toLocalDateTime() ?: LocalDateTime.now()
 
+    val finalSongId: String
+    val finalTitle: String
+    val finalArtist: String
+    val finalAlbum: String?
+    val finalDuration: Int
+    val finalThumbnail: String?
+
+    if (!youtubeId.isNullOrBlank() && isYouTubeVideoId(youtubeId)) {
+      // Already has verified YouTube ID
+      finalSongId = youtubeId
+      finalTitle = title
+      finalArtist = artist
+      finalAlbum = album
+      finalDuration = duration
+      finalThumbnail = imageUrl
+    } else if (isYouTubeVideoId(rawId) && doc.getString("source") != "saavn") {
+      // rawId is already a valid YouTube video ID
+      finalSongId = rawId
+      finalTitle = title
+      finalArtist = artist
+      finalAlbum = album
+      finalDuration = duration
+      finalThumbnail = imageUrl
+    } else {
+      // JioSaavn or external song: Resolve via YouTube Music!
+      val resolvedSong = resolveToYouTube(title, artist, duration)
+      if (resolvedSong != null) {
+        finalSongId = resolvedSong.id
+        finalTitle = resolvedSong.title
+        finalArtist = resolvedSong.artists.joinToString(", ") { it.name }.ifBlank { artist }
+        finalAlbum = resolvedSong.album?.name ?: album
+        finalDuration = resolvedSong.duration ?: duration
+        finalThumbnail = resolvedSong.thumbnail.ifBlank { imageUrl }
+
+        // Backfill resolved YouTube ID to Firestore asynchronously
+        try {
+          doc.reference.set(
+            mapOf("youtubeId" to resolvedSong.id, "source" to "youtube"),
+            SetOptions.merge()
+          )
+        } catch (e: Exception) {
+          Timber.tag(TAG).w(e, "Failed to backfill youtubeId to Firestore doc ${doc.id}")
+        }
+      } else {
+        Timber.tag(TAG).w("Could not resolve Saavn track to YouTube: '$title' by '$artist'. Skipping.")
+        return
+      }
+    }
+
     ensureSongEntityExists(
-      songId = songId,
-      title = title,
-      artist = artist,
-      album = album,
-      duration = duration,
-      thumbnailUrl = imageUrl,
+      songId = finalSongId,
+      title = finalTitle,
+      artist = finalArtist,
+      album = finalAlbum,
+      duration = finalDuration,
+      thumbnailUrl = finalThumbnail,
       liked = true,
       likedDate = likedAt
     )
-    Timber.tag(TAG).d("Liked song saved locally from remote: $songId ($title)")
+    Timber.tag(TAG).d("Liked song saved locally with YouTube ID: $finalSongId ($finalTitle)")
   }
 
   private fun setupPlaylistsListener(userId: String) {
@@ -217,7 +341,7 @@ object MuseSyncManager {
     }
   }
 
-  private fun applyRemotePlaylist(doc: DocumentSnapshot) {
+  private suspend fun applyRemotePlaylist(doc: DocumentSnapshot) {
     val db = database ?: return
     val playlistId = doc.id
     val name = doc.getString("name") ?: "Untitled Playlist"
@@ -247,10 +371,56 @@ object MuseSyncManager {
     }
 
     val rawSongs = doc.get("songs") as? List<*> ?: emptyList<Any>()
-    val songItems = parseSongItems(rawSongs)
+    val rawSongItems = parseSongItems(rawSongs)
+
+    val resolvedItems = mutableListOf<ParsedSong>()
+    var hasUpdatesForRemote = false
+    val updatedRemoteSongsList = rawSongs.filterIsInstance<Map<String, Any>>().map { HashMap(it) }.toMutableList()
+
+    rawSongItems.forEachIndexed { index, item ->
+      val effectiveItem: ParsedSong
+      if (!item.youtubeId.isNullOrBlank() && isYouTubeVideoId(item.youtubeId)) {
+        effectiveItem = item.copy(id = item.youtubeId)
+      } else if (isYouTubeVideoId(item.id)) {
+        effectiveItem = item
+      } else {
+        // Resolve JioSaavn track to YouTube
+        val ytSong = resolveToYouTube(item.title, item.artist, item.duration)
+        if (ytSong != null) {
+          val ytArtist = ytSong.artists.joinToString(", ") { it.name }.ifBlank { item.artist }
+          effectiveItem = item.copy(
+            id = ytSong.id,
+            title = ytSong.title,
+            artist = ytArtist,
+            album = ytSong.album?.name ?: item.album,
+            duration = ytSong.duration ?: item.duration,
+            thumbnailUrl = ytSong.thumbnail.ifBlank { item.thumbnailUrl },
+            youtubeId = ytSong.id
+          )
+          if (index < updatedRemoteSongsList.size) {
+            val updatedMap = updatedRemoteSongsList[index]
+            updatedMap["youtubeId"] = ytSong.id
+            updatedMap["source"] = "youtube"
+            hasUpdatesForRemote = true
+          }
+        } else {
+          effectiveItem = item
+        }
+      }
+      resolvedItems.add(effectiveItem)
+    }
+
+    // Backfill Firestore playlist if any tracks were resolved
+    if (hasUpdatesForRemote) {
+      try {
+        doc.reference.update("songs", updatedRemoteSongsList)
+      } catch (e: Exception) {
+        Timber.tag(TAG).w(e, "Failed to backfill resolved playlist tracks in Firestore")
+      }
+    }
 
     // Foreign key constraint safety: ensure all songs and artists exist in DB first!
-    songItems.forEach { item ->
+    resolvedItems.forEach { item ->
       ensureSongEntityExists(
         songId = item.id,
         title = item.title,
@@ -263,12 +433,12 @@ object MuseSyncManager {
       )
     }
 
-    // Now map them into playlist_song_map
+    // Map into playlist_song_map
     db.clearPlaylist(playlistId)
-    songItems.forEachIndexed { index, item ->
+    resolvedItems.forEachIndexed { index, item ->
       db.insert(PlaylistSongMap(playlistId = playlistId, songId = item.id, position = index))
     }
-    Timber.tag(TAG).d("Updated playlist $playlistId ($name) with ${songItems.size} songs from remote")
+    Timber.tag(TAG).d("Updated playlist $playlistId ($name) with ${resolvedItems.size} YouTube-resolved songs from remote")
   }
 
   /* -------------------------------------------------------------
@@ -286,17 +456,24 @@ object MuseSyncManager {
       // 1. Reconcile Liked Songs
       val likesCollection = firestore.collection("users").document(userId).collection("likes")
       val remoteLikesSnap = likesCollection.get().await()
-      val remoteLikedIds = remoteLikesSnap.documents.map { it.id }.toSet()
+      val totalLikes = remoteLikesSnap.documents.size
 
-      // Restore all remote likes to local Room DB
-      for (doc in remoteLikesSnap.documents) {
+      // Restore all remote likes to local Room DB with YouTube resolution
+      for ((index, doc) in remoteLikesSnap.documents.withIndex()) {
+        _syncStatus.value = SyncStatus.Resolving(index + 1, totalLikes)
         applyRemoteSongLike(doc)
       }
+
+      // Collect all known remote YouTube IDs and document IDs
+      val remoteDocIds = remoteLikesSnap.documents.map { it.id }.toSet()
+      val remoteYouTubeIds = remoteLikesSnap.documents.mapNotNull {
+        it.getString("youtubeId") ?: if (isYouTubeVideoId(it.id)) it.id else null
+      }.toSet()
 
       // Query all local liked songs
       val localLikedSongs = db.likedSongsByCreateDateAsc().first()
       for (localSong in localLikedSongs) {
-        if (!remoteLikedIds.contains(localSong.id)) {
+        if (!remoteDocIds.contains(localSong.id) && !remoteYouTubeIds.contains(localSong.id)) {
           // Push local like to remote cloud backup
           uploadSongLikeToFirestore(userId, localSong.song)
         }
@@ -354,10 +531,15 @@ object MuseSyncManager {
     val user = auth.currentUser ?: return
     scope.launch {
       try {
-        firestore.collection("users").document(user.uid)
-          .collection("likes").document(songId)
-          .delete()
-          .await()
+        val likesCol = firestore.collection("users").document(user.uid).collection("likes")
+        // Delete document by docId
+        likesCol.document(songId).delete().await()
+
+        // Also delete any document whose backfilled youtubeId matches songId
+        val matchingDocs = likesCol.whereEqualTo("youtubeId", songId).get().await()
+        for (doc in matchingDocs.documents) {
+          doc.reference.delete().await()
+        }
         Timber.tag(TAG).d("Deleted remote like for $songId")
       } catch (e: Exception) {
         Timber.tag(TAG).e(e, "Failed to delete remote like for $songId")
@@ -430,6 +612,8 @@ object MuseSyncManager {
           val artist = fullSong.artists.joinToString(", ") { it.name }.ifBlank { "Unknown Artist" }
           hashMapOf<String, Any>(
             "id" to fullSong.song.id,
+            "youtubeId" to fullSong.song.id,
+            "source" to "youtube",
             "name" to fullSong.song.title,
             "title" to fullSong.song.title,
             "artist" to artist,
@@ -462,7 +646,9 @@ object MuseSyncManager {
         if (snap.exists()) {
           val existingSongs = (snap.get("songs") as? List<*>)
             ?.filterIsInstance<Map<String, Any>>() ?: emptyList()
-          val updatedSongs = existingSongs.filter { (it["id"] as? String) != songId }
+          val updatedSongs = existingSongs.filter {
+            (it["id"] as? String) != songId && (it["youtubeId"] as? String) != songId
+          }
           docRef.update("songs", updatedSongs).await()
           Timber.tag(TAG).d("Removed song $songId from remote playlist $playlistId")
         }
@@ -481,6 +667,8 @@ object MuseSyncManager {
       val artistName = getArtistNameForSong(song.id)
       val data = hashMapOf<String, Any>(
         "id" to song.id,
+        "youtubeId" to song.id,
+        "source" to "youtube",
         "name" to song.title,
         "title" to song.title,
         "artist" to artistName,
@@ -508,6 +696,8 @@ object MuseSyncManager {
         val artist = full.artists.joinToString(", ") { it.name }.ifBlank { "Unknown Artist" }
         hashMapOf<String, Any>(
           "id" to full.song.id,
+          "youtubeId" to full.song.id,
+          "source" to "youtube",
           "name" to full.song.title,
           "title" to full.song.title,
           "artist" to artist,
@@ -588,7 +778,8 @@ object MuseSyncManager {
     val artist: String,
     val album: String?,
     val duration: Int,
-    val thumbnailUrl: String?
+    val thumbnailUrl: String?,
+    val youtubeId: String? = null
   )
 
   private fun parseSongItems(rawList: List<*>): List<ParsedSong> {
@@ -599,22 +790,30 @@ object MuseSyncManager {
       val artist = map["artist"]?.toString() ?: "Unknown Artist"
       val album = map["album"]?.toString()
       val duration = (map["duration"] as? Number)?.toInt() ?: -1
-      val image = extractImageUrl(map["image"])
+      val imageUrl = extractImageUrl(map["image"])
+      val youtubeId = map["youtubeId"]?.toString()
       ParsedSong(
         id = id,
         title = title,
         artist = artist,
         album = album,
         duration = duration,
-        thumbnailUrl = image
+        thumbnailUrl = imageUrl,
+        youtubeId = youtubeId
       )
     }
   }
 
-  private fun extractImageUrl(imageObj: Any?): String? {
-    return when (imageObj) {
-      is List<*> -> imageObj.lastOrNull()?.toString() ?: imageObj.firstOrNull()?.toString()
-      is String -> imageObj.takeIf { it.isNotBlank() }
+  private fun extractImageUrl(imageField: Any?): String? {
+    return when (imageField) {
+      is String -> imageField
+      is List<*> -> {
+        imageField.lastOrNull()?.toString()
+          ?: imageField.firstOrNull()?.toString()
+      }
+      is Map<*, *> -> {
+        imageField["url"]?.toString() ?: imageField["link"]?.toString()
+      }
       else -> null
     }
   }
