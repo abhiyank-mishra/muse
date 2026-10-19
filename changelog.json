@@ -1,22 +1,23 @@
 {
-  "description": "Muse Music v1.0.6 introduces native YouTube Music track resolution for cloud sync, eliminating JioSaavn playback failures and ensuring instant, seamless audio streaming for all synced tracks.",
+  "description": "Muse Music v1.0.7 brings synchronized Listen Together rooms with muse.abhiyank.in links, direct link sharing, and reliable real-time group song playback.",
   "changelog": [
     {
-      "title": "Native YouTube Music Track Resolution",
+      "title": "Listen Together (Group Song Sync)",
       "items": [
-        "Eliminated JioSaavn playback failures: all cloud-synced tracks are resolved directly to 11-char YouTube Video IDs",
-        "Automatic background track resolution using YouTube Music search pipeline with verified titles and audio streams",
-        "Dual cloud backfill: resolved YouTube IDs are synced back to Firestore for instant future synchronization",
-        "Integrated rate-limit protection and in-memory LRU cache for lightning-fast playlist reconciliation",
-        "Live resolving status counter in Account Settings ('Resolving with YouTube X/Y...')"
+        "Synchronized group listening sessions compatible with Muse Web (https://muse.abhiyank.in/colab?room=...)",
+        "Direct invite link generation and sharing formatted for the Muse web ecosystem",
+        "Deep link auto-joining: tapping room links opens the app and joins the group session immediately",
+        "Smart room code parser: accepts full invite links, /colab/ or /listen/ URLs, and 6-8 character codes",
+        "Switched to active high-availability WebSocket sync server (devilmi-vivi-music-listen-together.hf.space)",
+        "Reliable RFC 6455 Text-frame WebSocket communication for real-time play, pause, seek, and track sync"
       ]
     },
     {
-      "title": "Cloud Sync & Playback Improvements",
+      "title": "Fixes & Stability",
       "items": [
-        "Unlinking and playlist item deletions now accurately match both document IDs and YouTube video IDs",
-        "Guaranteed instant playback on ExoPlayer for all liked songs and custom playlist imports",
-        "Enhanced Nothing OS 5.0 sync indicator card with reactive busy states and retry handling"
+        "Fixed WebSocket payload serialization rejecting binary frames on JSON servers",
+        "Expanded room code validator to support all 6-8 character alphanumeric codes across screens",
+        "Optimized deep link routing and room joining in MainActivity"
       ]
     }
   ]
