@@ -1,0 +1,24 @@
+{
+  "description": "Muse Music v1.0.7 brings synchronized Listen Together rooms with muse.abhiyank.in links, direct link sharing, and reliable real-time group song playback.",
+  "changelog": [
+    {
+      "title": "Listen Together (Group Song Sync)",
+      "items": [
+        "Synchronized group listening sessions compatible with Muse Web (https://muse.abhiyank.in/colab?room=...)",
+        "Direct invite link generation and sharing formatted for the Muse web ecosystem",
+        "Deep link auto-joining: tapping room links opens the app and joins the group session immediately",
+        "Smart room code parser: accepts full invite links, /colab/ or /listen/ URLs, and 6-8 character codes",
+        "Switched to active high-availability WebSocket sync server (devilmi-vivi-music-listen-together.hf.space)",
+        "Reliable RFC 6455 Text-frame WebSocket communication for real-time play, pause, seek, and track sync"
+      ]
+    },
+    {
+      "title": "Fixes & Stability",
+      "items": [
+        "Fixed WebSocket payload serialization rejecting binary frames on JSON servers",
+        "Expanded room code validator to support all 6-8 character alphanumeric codes across screens",
+        "Optimized deep link routing and room joining in MainActivity"
+      ]
+    }
+  ]
+}

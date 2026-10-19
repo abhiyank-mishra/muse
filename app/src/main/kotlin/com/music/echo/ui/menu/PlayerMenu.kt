@@ -1751,7 +1751,7 @@ fun ListenTogetherDialog(visible: Boolean, mediaMetadata: MediaMetadata?, onDism
                 Spacer(modifier = Modifier.height(12.dp))
                 val inviteLink =
                   remember(room.roomCode) {
-                    "https://metroserverx.meowery.eu/listen?code=${room.roomCode}"
+                    echo.music.iad1tya.listentogether.ListenTogetherUtils.createInviteLink(room.roomCode)
                   }
                 Row(
                   verticalAlignment = Alignment.CenterVertically,
@@ -2189,7 +2189,7 @@ fun ListenTogetherDialog(visible: Boolean, mediaMetadata: MediaMetadata?, onDism
             OutlinedTextField(
               value = roomCodeInput,
               onValueChange = {
-                roomCodeInput = it.uppercase().filter { c -> c.isLetterOrDigit() }.take(8)
+                roomCodeInput = echo.music.iad1tya.listentogether.ListenTogetherUtils.parseRoomCode(it)
               },
               label = { Text(stringResource(R.string.room_code)) },
               placeholder = { Text("ABCD1234") },
@@ -2310,7 +2310,7 @@ fun ListenTogetherDialog(visible: Boolean, mediaMetadata: MediaMetadata?, onDism
               Text(stringResource(R.string.create_room), fontWeight = FontWeight.SemiBold)
             }
 
-            if (roomCodeInput.length == 8) {
+            if (roomCodeInput.length in 6..8) {
               Button(
                 onClick = {
                   val username = usernameInput.takeIf { it.isNotBlank() } ?: savedUsername

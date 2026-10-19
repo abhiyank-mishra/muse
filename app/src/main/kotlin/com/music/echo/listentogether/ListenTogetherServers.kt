@@ -22,14 +22,17 @@ object ListenTogetherServers {
   private const val SERVER_JSON_URL =
     "https://raw.githubusercontent.com/EchoMusicApp/Echo-Music/refs/heads/main/app/server.json"
 
+  private const val PRIMARY_SYNC_SERVER_URL =
+    "wss://devilmi-vivi-music-listen-together.hf.space/ws"
+
   private val _servers =
     MutableStateFlow(
       listOf(
         ListenTogetherServer(
-          name = "Metrolist Server",
-          url = "wss://metroserverx.meowery.eu/ws",
-          location = "Poland",
-          operator = "Metrolist"
+          name = "Muse Sync Server",
+          url = PRIMARY_SYNC_SERVER_URL,
+          location = "Global",
+          operator = "Muse"
         )
       )
     )
@@ -47,14 +50,21 @@ object ListenTogetherServers {
         val response = client.newCall(request).execute()
         response.body?.string()?.let { jsonString ->
           val jsonObject = Json.parseToJsonElement(jsonString).jsonObject
-          val name = jsonObject["name"]?.jsonPrimitive?.content ?: "Hugging Face Sync"
-          val url =
+          val name = jsonObject["name"]?.jsonPrimitive?.content ?: "Muse Sync Server"
+          var url =
             jsonObject["serverUrl"]?.jsonPrimitive?.content
-              ?: "wss://devilmi-vivi-music-listen-together.hf.space"
-          val region = jsonObject["region"]?.jsonPrimitive?.content ?: "Global - VIVIDH"
+              ?: PRIMARY_SYNC_SERVER_URL
+          val region = jsonObject["region"]?.jsonPrimitive?.content ?: "Global"
+
+          // If remote config still points to blocked metroserverx, retain our working primary server
+          if (url.contains("metroserverx")) {
+            url = PRIMARY_SYNC_SERVER_URL
+          } else if (!url.endsWith("/ws") && !url.contains("/ws")) {
+            url = url.trimEnd('/') + "/ws"
+          }
 
           _servers.value =
-            listOf(ListenTogetherServer(name = name, url = url, location = region, operator = ""))
+            listOf(ListenTogetherServer(name = name, url = url, location = region, operator = "Muse"))
         }
       } catch (e: Exception) {
         // Fallback implicitly retained

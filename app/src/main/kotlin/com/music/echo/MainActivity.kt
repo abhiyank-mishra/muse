@@ -2014,17 +2014,25 @@ class MainActivity : ComponentActivity() {
     intent.removeExtra(Intent.EXTRA_TEXT)
     val coroutineScope = lifecycle.coroutineScope
 
-    val listenCode =
-      uri.getQueryParameter("code")
-        ?: uri.getQueryParameter("room")
+    val rawListenCode =
+      uri.getQueryParameter("room")
+        ?: uri.getQueryParameter("code")
         ?: uri.pathSegments.getOrNull(1)
+    val firstSegment = uri.pathSegments.firstOrNull()?.lowercase()
+    val hostName = uri.host?.lowercase()
     val isListenLink =
-      uri.pathSegments.firstOrNull() == "listen" ||
-        uri.host?.equals("listen", ignoreCase = true) == true
-    if (!listenCode.isNullOrBlank() && isListenLink) {
-      val username = dataStore.get(ListenTogetherUsernameKey, "").ifBlank { "Guest" }
-      listenTogetherManager.joinRoom(listenCode, username)
-      return
+      firstSegment == "colab" ||
+        firstSegment == "listen" ||
+        hostName == "colab" ||
+        hostName == "listen" ||
+        (hostName == "muse.abhiyank.in" && (firstSegment == "colab" || firstSegment == "listen"))
+    if (!rawListenCode.isNullOrBlank() && isListenLink) {
+      val listenCode = echo.music.iad1tya.listentogether.ListenTogetherUtils.parseRoomCode(rawListenCode)
+      if (listenCode.isNotBlank()) {
+        val username = dataStore.get(ListenTogetherUsernameKey, "").ifBlank { "Guest" }
+        listenTogetherManager.joinRoom(listenCode, username)
+        return
+      }
     }
 
     when (val path = uri.pathSegments.firstOrNull()) {

@@ -267,7 +267,7 @@ fun ListenTogetherSettings(
         Button(
           onClick = {
             val finalUsername = joinUsername.trim()
-            if (finalUsername.isNotBlank() && roomCodeInput.length == 8) {
+            if (finalUsername.isNotBlank() && roomCodeInput.length in 6..8) {
               username = finalUsername
               viewModel.joinRoom(roomCodeInput, finalUsername)
               showJoinRoomDialog = false
@@ -276,7 +276,7 @@ fun ListenTogetherSettings(
               Toast.makeText(context, R.string.error_username_empty, Toast.LENGTH_SHORT).show()
             }
           },
-          enabled = joinUsername.trim().isNotBlank() && roomCodeInput.length == 8
+          enabled = joinUsername.trim().isNotBlank() && roomCodeInput.length in 6..8
         ) {
           Text(stringResource(R.string.join))
         }
@@ -294,7 +294,7 @@ fun ListenTogetherSettings(
         OutlinedTextField(
           value = roomCodeInput,
           onValueChange = {
-            roomCodeInput = it.uppercase().filter { c -> c.isLetterOrDigit() }.take(8)
+            roomCodeInput = echo.music.iad1tya.listentogether.ListenTogetherUtils.parseRoomCode(it)
           },
           label = { Text(stringResource(R.string.listen_together_room_code)) },
           leadingIcon = { Icon(painterResource(R.drawable.key), contentDescription = null) },

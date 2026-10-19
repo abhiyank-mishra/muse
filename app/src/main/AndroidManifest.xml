@@ -102,7 +102,21 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
 
-            <!-- Listen Together invite link (HTTPS App Link - works after APK installation verification) -->
+            <!-- Muse Listen Together / Colab invite links (HTTPS App Link) -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="http" />
+                <data android:scheme="https" />
+                <data android:host="muse.abhiyank.in" />
+                <data android:pathPrefix="/colab" />
+                <data android:pathPrefix="/listen" />
+            </intent-filter>
+
+            <!-- Listen Together invite link (legacy / alternative HTTPS App Link) -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
 
@@ -115,6 +129,17 @@
             </intent-filter>
 
             <!-- Custom scheme for direct opens from browser (works in ALL browsers) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="muse" />
+                <data android:host="colab" />
+                <data android:host="listen" />
+            </intent-filter>
+
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
 

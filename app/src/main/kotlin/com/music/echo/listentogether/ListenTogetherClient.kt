@@ -1309,7 +1309,12 @@ class ListenTogetherClient @Inject constructor(private val context: Context) {
       val data = codec.encode(type, payload)
       log(LogLevel.DEBUG, "Sending message", "$type (${codec.format.name})")
 
-      val success = webSocket?.send(okio.ByteString.of(*data)) ?: false
+      val success =
+        if (codec.format == MessageFormat.JSON) {
+          webSocket?.send(data.decodeToString()) ?: false
+        } else {
+          webSocket?.send(okio.ByteString.of(*data)) ?: false
+        }
       if (!success) {
         log(LogLevel.ERROR, "Failed to send message", type)
       }

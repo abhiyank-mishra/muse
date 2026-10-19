@@ -361,7 +361,7 @@ fun ListenTogetherScreen(navController: NavController, showTopBar: Boolean = fal
             val finalUsername = username.trim()
             val finalRoomCode = roomCodeInput.trim()
 
-            if (finalUsername.isNotBlank() && finalRoomCode.length == 8) {
+            if (finalUsername.isNotBlank() && finalRoomCode.length in 6..8) {
               savedUsername = finalUsername
               Toast.makeText(
                   context,
@@ -695,7 +695,9 @@ private fun RoomStatusCard(
       if (isHost) {
         Spacer(modifier = Modifier.height(16.dp))
         val inviteLink =
-          remember(roomCode) { "https://metroserverx.meowery.eu/listen?code=$roomCode" }
+          remember(roomCode) {
+            echo.music.iad1tya.listentogether.ListenTogetherUtils.createInviteLink(roomCode)
+          }
         Row(
           verticalAlignment = Alignment.CenterVertically,
           horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
@@ -1128,7 +1130,9 @@ private fun JoinCreateRoomSection(
       ) {
         OutlinedTextField(
           value = roomCodeInput,
-          onValueChange = { if (it.length <= 8) onRoomCodeChange(it.uppercase()) },
+          onValueChange = {
+            onRoomCodeChange(echo.music.iad1tya.listentogether.ListenTogetherUtils.parseRoomCode(it))
+          },
           label = { Text(stringResource(R.string.room_code)) },
           placeholder = { Text(stringResource(R.string.enter_room_code)) },
           leadingIcon = {
@@ -1227,7 +1231,7 @@ private fun JoinCreateRoomSection(
       }
 
       val hasUsername = usernameInput.trim().isNotBlank() || savedUsername.isNotBlank()
-      val hasRoomCode = roomCodeInput.length == 8
+      val hasRoomCode = roomCodeInput.length in 6..8
 
       if (selectedTab == 0) {
         Button(
