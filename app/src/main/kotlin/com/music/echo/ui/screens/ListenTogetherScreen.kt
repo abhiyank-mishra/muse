@@ -683,10 +683,13 @@ private fun RoomStatusCard(
       Spacer(modifier = Modifier.height(4.dp))
       Text(
         text =
-          if (isHost) stringResource(R.string.listen_together_you_are_host)
-          else if (allowParticipantControl)
-            stringResource(R.string.listen_together_participant_control_enabled)
-          else stringResource(R.string.listen_together_you_are_guest),
+          if (isHost) {
+            if (allowParticipantControl) stringResource(R.string.listen_together_host_collab)
+            else stringResource(R.string.listen_together_host_only)
+          } else {
+            if (allowParticipantControl) stringResource(R.string.listen_together_guest_collab)
+            else stringResource(R.string.listen_together_guest_only)
+          },
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         textAlign = TextAlign.Center

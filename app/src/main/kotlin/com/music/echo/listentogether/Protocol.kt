@@ -93,7 +93,7 @@ data class RoomState(
   @SerialName("last_update") val lastUpdate: Long,
   val volume: Float = 1f,
   val queue: List<TrackInfo> = emptyList(),
-  @SerialName("allow_participant_control") val allowParticipantControl: Boolean = false
+  @SerialName("allow_participant_control") val allowParticipantControl: Boolean = true
 )
 
 @Serializable

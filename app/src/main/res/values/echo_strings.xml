@@ -685,6 +685,10 @@
     <string name="listen_together_leave_room">Leave room</string>
     <string name="listen_together_you_are_host">You are the host</string>
     <string name="listen_together_you_are_guest">You are a guest</string>
+    <string name="listen_together_host_collab">You are host • Collaborative room</string>
+    <string name="listen_together_host_only">You are host • Host-only room</string>
+    <string name="listen_together_guest_collab">You are a member • You can play songs</string>
+    <string name="listen_together_guest_only">Listening mode • Host controls music</string>
     <string name="mute">Mute</string>
     <string name="unmute">Unmute</string>
     <string name="listen_together_users">%d users in room</string>
@@ -698,6 +702,7 @@
     <string name="listen_together_allow_participant_control">Allow participants to control music</string>
     <string name="listen_together_allow_participant_control_desc">Let guests play, pause, skip, and change the queue</string>
     <string name="listen_together_participant_control_enabled">Participants can control music</string>
+    <string name="listen_together_control_disabled">Playback control is disabled by the host</string>
     <string name="listen_together_sync_volume">Sync host volume</string>
     <string name="listen_together_sync_volume_desc">Guests follow the host volume level</string>
     <string name="listen_together_in_top_bar">Listen Together in top bar</string>

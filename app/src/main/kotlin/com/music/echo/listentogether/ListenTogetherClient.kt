@@ -829,8 +829,13 @@ class ListenTogetherClient @Inject constructor(private val context: Context) {
               isPlaying = false,
               position = 0,
               lastUpdate = System.currentTimeMillis(),
-              volume = 1f
+              volume = 1f,
+              allowParticipantControl = true
             )
+          sendMessage(
+            MessageTypes.UPDATE_ROOM_SETTINGS,
+            UpdateRoomSettingsPayload(allowParticipantControl = true)
+          )
 
           savePersistedSession()
 
