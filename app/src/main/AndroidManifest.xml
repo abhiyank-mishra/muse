@@ -117,7 +117,7 @@
             </intent-filter>
 
             <!-- Listen Together invite link (legacy / alternative HTTPS App Link) -->
-            <intent-filter android:autoVerify="true">
+            <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
 
                 <category android:name="android.intent.category.DEFAULT" />
@@ -138,6 +138,7 @@
                 <data android:scheme="muse" />
                 <data android:host="colab" />
                 <data android:host="listen" />
+                <data android:host="muse.abhiyank.in" />
             </intent-filter>
 
             <intent-filter>
@@ -151,7 +152,7 @@
             </intent-filter>
 
             <!-- Echo Music Share Links -->
-            <intent-filter android:autoVerify="true">
+            <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
 
                 <category android:name="android.intent.category.DEFAULT" />
@@ -164,7 +165,7 @@
             </intent-filter>
 
             <!-- Youtube filter -->
-            <intent-filter android:autoVerify="true">
+            <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
                 <action android:name="android.nfc.action.NDEF_DISCOVERED" />
@@ -194,7 +195,7 @@
                 <data android:pathPrefix="/search" />
             </intent-filter>
 
-            <intent-filter android:autoVerify="true">
+            <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
                 <action android:name="android.nfc.action.NDEF_DISCOVERED" />

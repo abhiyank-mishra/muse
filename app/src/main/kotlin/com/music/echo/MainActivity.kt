@@ -2031,6 +2031,13 @@ class MainActivity : ComponentActivity() {
       if (listenCode.isNotBlank()) {
         val username = dataStore.get(ListenTogetherUsernameKey, "").ifBlank { "Guest" }
         listenTogetherManager.joinRoom(listenCode, username)
+        try {
+          navController.navigate(echo.music.iad1tya.ui.screens.Screens.ListenTogether.route) {
+            launchSingleTop = true
+          }
+        } catch (e: Exception) {
+          timber.log.Timber.e(e, "Failed to navigate to listen_together")
+        }
         return
       }
     }

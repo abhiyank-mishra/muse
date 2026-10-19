@@ -1799,6 +1799,28 @@ fun ListenTogetherDialog(visible: Boolean, mediaMetadata: MediaMetadata?, onDism
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(stringResource(R.string.copy_code))
                   }
+
+                  Spacer(modifier = Modifier.width(8.dp))
+
+                  FilledTonalButton(
+                    onClick = {
+                      val sendIntent = android.content.Intent().apply {
+                        action = android.content.Intent.ACTION_SEND
+                        putExtra(android.content.Intent.EXTRA_TEXT, "Join my Listen Together session on Muse Music:\n$inviteLink")
+                        type = "text/plain"
+                      }
+                      val shareIntent = android.content.Intent.createChooser(sendIntent, null)
+                      context.startActivity(shareIntent)
+                    }
+                  ) {
+                    Icon(
+                      painter = painterResource(R.drawable.share),
+                      contentDescription = stringResource(R.string.share),
+                      modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(stringResource(R.string.share))
+                  }
                 }
               }
             }
